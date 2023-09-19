@@ -4,6 +4,20 @@ Python-based add-in for Autodesk Fusion360 offering commands to generate keycap 
 # How to install
 Clone or download the repo into "C:\Users\<user>\AppData\Roaming\Autodesk\Autodesk Fusion 360\API\AddIns" and restart Fusion360. 
 
+# Currently only available on the dev-branch
+## Outstanding issues:
+- Missing icons for the commands need to be designed
+- Command Previews need to be implemented
+- Command Edit Definition for the timeline needs to implemented (see: https://help.autodesk.com/view/fusion360/ENU/?guid=GUID-FA7EF128-1DE0-4115-89A3-795551E2DEF2)
+- Failure states need to be improved: Errors during most feature operations just kill the workflow mid-step leaving half finished components
+- Command Validations need to be implemented
+- Code is really messy and needs to be cleaned up and properly encapsulated
+- Honor KLE legend positioning; right now all legends are centered, but can be offset in one single direction
+- Use KLE row feature: Rows can be configured in KLE, might be useful to utilize
+- Offer more options for keycap generation (automatic lofting and scaling)
+- Add "Cut switch cavity" command
+- Make it easier to apply different appearances to legends and keycaps 
+
 # How to use
 The add-in provides its commands in the Solid Design space of Fusion360 under the Create group. You will need to provide the following:
 - 1U model of your keycap with the switch cavity already cut into the bottom
@@ -46,20 +60,6 @@ Uses the generated keycap models and copies them to a position defined by KLE:
 - Paste your KLE raw data. This time it is used to determine the position of where what keycap needs to be moved to.
 - Select the components generated in step 1 and step 4. The step 1 component is used as a fallback, if no corresponding model from step 4 is found.
 Since this uses component occurrences it is rather quick and should only take a couple of seconds.
-
-# Currently only available on the dev-branch
-## Outstanding issues:
-- Missing icons for the commands need to be designed
-- Command Previews need to be implemented
-- Command Edit Definition for the timeline needs to implemented (see: https://help.autodesk.com/view/fusion360/ENU/?guid=GUID-FA7EF128-1DE0-4115-89A3-795551E2DEF2)
-- Failure states need to be improved: Errors during most feature operations just kill the workflow mid-step leaving half finished components
-- Command Validations need to be implemented
-- Code is really messy and needs to be cleaned up and properly encapsulated
-- Honor KLE legend positioning; right now all legends are centered, but can be offset in one single direction
-- Use KLE row feature: Rows can be configured in KLE, might be useful to utilize
-- Offer more options for keycap generation (automatic lofting and scaling)
-- Add "Cut switch cavity" command
-- Make it easier to apply different appearances to legends and keycaps 
 
 # fontTools
 This add-in uses fontTools-4.42.1. Since Fusion360 uses its own Python installation the files for the library are copied into the lib-folder of this add-in.
