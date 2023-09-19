@@ -7,11 +7,12 @@ Clone or download the repo into "C:\Users\<user>\AppData\Roaming\Autodesk\Autode
 # How to use
 The add-in provides its commands in the Solid Design space of Fusion360 under the Create group. You will need to provide the following:
 - 1U model of your keycap with the switch cavity already cut into the bottom
-- A stem model compatible with the cut switch cavity
+- A distinct stem model compatible with the cut switch cavity
 - A KLE layout
 
 ## Step 0: Model preparation
 - The center of the 1U model bottom face must be the origin of the design
+- Move the stem model to the correct position in relation to the 1U body
 - Use the "Split Body" command under "Modify" and split the 1U model with the YZ construction plane into a left and right half
 - If you inserted components make sure all links are broken
 
