@@ -27,7 +27,7 @@ The add-in provides its commands in the Solid Design space of Fusion360 under th
 - A KLE layout
 
 ## Step 0: Model preparation
-- The center of the 1U model bottom face must be the origin of the design
+- The center of the 1U model bottom face must be the origin of the design; the bottom face should be on the XY-plane
 - Move the stem model to the correct position in relation to the 1U body
 - Use the "Split Body" command under "Modify" and split the 1U model with the YZ construction plane into a left and right half
 - If you inserted components make sure all links are broken
