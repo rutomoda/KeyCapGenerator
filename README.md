@@ -2,7 +2,7 @@
 Python-based add-in for Autodesk Fusion360 offering commands to generate keycap models to cover keyboard layouts made with http://www.keyboard-layout-editor.com/
 
 # How to install
-Clone or download the repo into "C:\Users\<user>\AppData\Roaming\Autodesk\Autodesk Fusion 360\API\AddIns" and restart Fusion360. 
+Clone or download the repo into "C:\Users\\<user\>\AppData\Roaming\Autodesk\Autodesk Fusion 360\API\AddIns" and restart Fusion360. 
 
 # Currently only available on the dev-branch
 ## Outstanding issues:
