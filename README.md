@@ -30,6 +30,7 @@ Generates a component containing sketches for the keycap legends. This is sepera
 - Paste your KLE raw data. For this steps only the legends are read.
 - Either select an existing construction plane or set the auto-generation parameters. The sketch plane dictates from where the legends are projected onto the keycap.
 - Selecting an existing component allows to overwrite all matching sketches (for easier font tweaking)
+- 
 Warning: due to font loading the mask takes forever to load!
 
 ## Step 4: Apply Labels to Keycaps
@@ -37,6 +38,7 @@ Extrudes the sketches from Step 3, then intersects them with the keycap model mu
 - Paste your KLE raw data. This time it is used to match the legend sketches with the keycap sizes.
 - Select the components generated in step 1 and step 3.
 - Sketch Extrude Distance: The legend sketch is extruded "into" the keycap. This distance needs to be set to a value, that the whole end face of the extrusion is within the keycap body!
+  
 This is a long operation. Depending on your computing power and number of keycaps to generate this will take several minutes.
 
 ## Step 5: Generate Layout
