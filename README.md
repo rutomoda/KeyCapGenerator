@@ -13,7 +13,8 @@ Clone or download the repo into "C:\Users\<user>\AppData\Roaming\Autodesk\Autode
 - Command Validations need to be implemented
 - Code is really messy and needs to be cleaned up and properly encapsulated
 - Honor KLE legend positioning; right now all legends are centered, but can be offset in one single direction
-- Use KLE row feature: Rows can be configured in KLE, might be useful to utilize
+- Support KLE row feature: keycap rows can be configured in KLE, might be useful to utilize, especially to generate GMK base set style layouts
+- Support KLE rotation feature
 - Offer more options for keycap generation (automatic lofting and scaling)
 - Add "Cut switch cavity" command
 - Make it easier to apply different appearances to legends and keycaps 
@@ -34,7 +35,7 @@ The add-in provides its commands in the Solid Design space of Fusion360 under th
 Creates the configured keycap sizes by moving the 1U halves apart and extruding the profile between them. For this to work:
 - Select left and right half bodies
 - Select the face of the left half (due to orientation this needs to be this one right now) that should connect the two halves
-- It is recommended to generate rowed profiles all into the same Sizes-Assembly: for this set the Row field and select the target component
+- It is recommended to generate rowed profiles all into the same Sizes-Assembly: for this set the Row field and select the target component; row=0 is automapped to the top most row in KLE - automapping probably does not work with columnar staggered layouts or rotation
 
 ## Step 2: Add Stabilizer Stems
 Adds stabilizer stems to the bigger keycaps. 
@@ -44,7 +45,7 @@ Generates a component containing sketches for the keycap legends. This is sepera
 - Paste your KLE raw data. For this steps only the legends are read.
 - Either select an existing construction plane or set the auto-generation parameters. The sketch plane dictates from where the legends are projected onto the keycap.
 - Selecting an existing component allows to overwrite all matching sketches (for easier font tweaking)
-- 
+  
 Warning: due to font loading the mask takes forever to load!
 
 ## Step 4: Apply Labels to Keycaps
