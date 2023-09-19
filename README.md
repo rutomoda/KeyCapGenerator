@@ -17,7 +17,8 @@ Clone or download the repo into "C:\Users\<user>\AppData\Roaming\Autodesk\Autode
 - Support KLE rotation feature
 - Offer more options for keycap generation (automatic lofting and scaling)
 - Add "Cut switch cavity" command
-- Make it easier to apply different appearances to legends and keycaps 
+- Make it easier to apply different appearances to legends and keycaps
+- This may not probably support designs where XYZ uses the default Fusion360 orientation. Developed with X=left,right Y=front,back Z=up,down 
 
 # How to use
 The add-in provides its commands in the Solid Design space of Fusion360 under the Create group. You will need to provide the following:
