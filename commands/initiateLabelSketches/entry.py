@@ -46,10 +46,15 @@ local_handlers = []
 def start():
     # Create a command Definition.
     cmd_def = ui.commandDefinitions.addButtonDefinition(
-        CMD_ID, CMD_NAME, CMD_Description, ICON_FOLDER)
+        CMD_ID, 
+        CMD_NAME, 
+        CMD_Description, 
+        ICON_FOLDER)
 
     # Define an event handler for the command created event. It will be called when the button is clicked.
-    futil.add_handler(cmd_def.commandCreated, command_created)
+    futil.add_handler(
+        cmd_def.commandCreated, 
+        command_created)
 
     # ******** Add a button into the UI so the user can run the command. ********
     # Get the target workspace the button will be created in.
@@ -59,10 +64,31 @@ def start():
     panel = workspace.toolbarPanels.itemById(PANEL_ID)
 
     # Create the button command control in the UI after the specified existing command.
-    control = panel.controls.addCommand(cmd_def, COMMAND_BESIDE_ID, False)
+    control = panel.controls.addCommand(
+        cmd_def, 
+        COMMAND_BESIDE_ID, 
+        False)
 
     # Specify if the command is promoted to the main toolbar.
     control.isPromoted = IS_PROMOTED
+
+    editCmdDef = ui.commandDefinitions.addButtonDefinition(
+        CMD_ID + '-edit', 
+        'Edit ' + CMD_NAME, 
+        'Edits ' + CMD_NAME, 
+        '')
+
+    # Define an event handler for the edit command created event. It will be called when the button is clicked.
+    futil.add_handler(
+        editCmdDef.commandCreated, 
+        command_created) 
+    
+    global featureDef    
+    featureDef = adsk.fusion.CustomFeatureDefinition.create(
+        CMD_ID + '-feature',
+        CMD_NAME,
+        ICON_FOLDER)
+    featureDef.editCommandId = editCmdDef.id
 
 
 # Executed when add-in is stopped.
@@ -72,6 +98,11 @@ def stop():
     panel = workspace.toolbarPanels.itemById(PANEL_ID)
     command_control = panel.controls.itemById(CMD_ID)
     command_definition = ui.commandDefinitions.itemById(CMD_ID)
+
+    edit_command_definition = ui.commandDefinitions.itemById(CMD_ID+'-edit')
+
+    if edit_command_definition:
+        edit_command_definition.deleteMe()
 
     # Delete the button command control
     if command_control:
@@ -162,11 +193,10 @@ def command_execute(args: adsk.core.CommandEventArgs):
     futil.log(f'{CMD_NAME} Positions: ' + '; '.join(map(str, positions)))
 
     labelsInput: adsk.core.SelectionCommandInput = inputs.itemById('labels')
+    labels:adsk.fusion.Component = None
     if labelsInput.selectionCount == 1:
         labelsOccurrence = labelsInput.selection(0).entity
         labels = labelsOccurrence.component
-    else:
-        labels = None
 
     planeInput: adsk.core.SelectionCommandInput = inputs.itemById(
         'legendPlane')
@@ -196,12 +226,16 @@ def command_execute(args: adsk.core.CommandEventArgs):
     fontYOffset = fontYOffsetInput.value
 
     # Create new assembly component
-    design = adsk.fusion.Design.cast(app.activeProduct)
-    trans = adsk.core.Matrix3D.create()
 
+    design = adsk.fusion.Design.cast(app.activeProduct)
+    
+    startOp: adsk.core.Base = None
+    endOp: adsk.core.Base = None
     if labels is None:
+        trans = adsk.core.Matrix3D.create()
         labelsOccurrence = design.rootComponent.occurrences.addNewComponent(
             trans)
+        startOp = setStartOp(startOp, labelsOccurrence)
         labels = labelsOccurrence.component
         labels.name = config.COMPONENT_NAME_LABELS
 
@@ -214,6 +248,7 @@ def command_execute(args: adsk.core.CommandEventArgs):
                 adsk.core.ValueInput.createByReal(angle),
                 labels.xYConstructionPlane)
             basePlane = planes.add(anglePlaneInput)
+            startOp = setStartOp(startOp, basePlane)
             basePlane.isLightBulbOn = False
             basePlane.name = 'Font Angle Base'
         else:
@@ -223,6 +258,7 @@ def command_execute(args: adsk.core.CommandEventArgs):
             basePlane,
             adsk.core.ValueInput.createByReal(offset))
         sketchPlane = planes.add(offsetPlaneInput)
+        startOp = setStartOp(startOp, sketchPlane)
         sketchPlane.name = 'Font Sketch Plane'
     else:
         sketchPlane = plane
@@ -247,6 +283,7 @@ def command_execute(args: adsk.core.CommandEventArgs):
             if not oldSketch.deleteMe():
                 oldSketch.name = '##' + oldSketch.name
         sketch = labels.sketches.add(sketchPlane)
+        startOp = setStartOp(startOp, sketch)
         sketch.name = position.label
         texts = sketch.sketchTexts
         labelInput = texts.createInput2(
@@ -259,7 +296,8 @@ def command_execute(args: adsk.core.CommandEventArgs):
             adsk.core.VerticalAlignments.MiddleVerticalAlignment,
             0.0)
         labelInput.fontName = font
-        texts.add(labelInput)
+        text = texts.add(labelInput)
+        endOp = sketch
         adsk.doEvents()
 
     # Logging if a size was not found
@@ -267,6 +305,17 @@ def command_execute(args: adsk.core.CommandEventArgs):
         futil.log(f'{CMD_NAME} sizes not found for positions: ' +
                   '; '.join(map(str, notFound)))
 
+    featureComponent = design.activeComponent
+    customFeature = featureComponent.features.customFeatures.createInput(featureDef)
+    customFeature.setStartAndEndFeatures(startOp, endOp)
+    featureComponent.features.customFeatures.add(customFeature)
+    
+def setStartOp(startOp: adsk.core.Base,
+               nextOp: adsk.core.Base) ->adsk.core.Base:
+    if startOp is None:
+        return nextOp
+    else:
+        return startOp 
 
 # This event handler is called when the command needs to compute a new preview in the graphics window.
 def command_preview(args: adsk.core.CommandEventArgs):
