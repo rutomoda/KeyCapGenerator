@@ -7,8 +7,8 @@ from .addStems import entry as addStems
 from .createSizesExtrude import entry as createSizesExtrude
 from .cutSwitchDomes import entry as cutSwitchDomes
 from .generateLayout import entry as generateLayout
-from .initiateLabelSketches import entry as initiateLabelSketches
-from .labelKeycaps import entry as labelKeycaps
+from .initiateLegendSketches import entry as initiateLegendSketches
+from .applyLegends import entry as applyLegends
 
 # TODO add your imported modules to this list.
 # Fusion will automatically call the start() and stop() functions.
@@ -16,8 +16,8 @@ commands = [
     createSizesExtrude,
     addStems,
     #   cutSwitchDomes,
-    initiateLabelSketches,
-    labelKeycaps,
+    initiateLegendSketches,
+    applyLegends,
     generateLayout
 ]
 

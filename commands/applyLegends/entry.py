@@ -51,7 +51,7 @@ def command_created(args: adsk.core.CommandCreatedEventArgs):
         adsk.core.SelectionCommandInput.Occurrences)
 
     labelsSelect = inputs.addSelectionInput(
-        'labels', config.COMPONENT_NAME_LABELS, 'The Labels Assembly')
+        'labels', config.COMPONENT_NAME_LEGENDS, 'The Labels Assembly')
     labelsSelect.setSelectionLimits(1, 1)
     labelsSelect.addSelectionFilter(
         adsk.core.SelectionCommandInput.Occurrences)

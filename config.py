@@ -48,10 +48,10 @@ KEYCAP_LABELED_ROW_SIZE_FORMAT = 'R{}-' + KEYCAP_LABELED_SIZE_FORMAT
 
 DEFAULT_1U_SPACING = 1.9
 
-COMPONENT_NAME_SIZES = 'KCG-Sizes-Assembly'
+COMPONENT_NAME_SIZES = 'KCG-Keycap-Sizes-Assembly'
 COMPONENT_NAME_LAYOUT = 'KCG-Layout-Assembly'
-COMPONENT_NAME_LABELS = 'KCG-Labels-Assembly'
-COMPONENT_NAME_LABELED = 'KCG-Labeled-Sizes-Assembly'
+COMPONENT_NAME_LEGENDS = 'KCG-Legend-Sketches-Assembly'
+COMPONENT_NAME_LABELED = 'KCG-Labeled-Keycap-Assembly'
 
 def toId(idTag:str) -> str: 
    return f'{COMPANY_NAME}_{ADDIN_NAME}_{idTag}'

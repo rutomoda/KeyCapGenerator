@@ -51,7 +51,7 @@ def command_created(args: adsk.core.CommandCreatedEventArgs):
         'kleRaw', 'KLE Raw Data', '["Q","W","E","R"],["A","S","D","F"]', 7, False)
 
     sizesSelect = inputs.addSelectionInput(
-        'labels', 'Existing '+config.COMPONENT_NAME_LABELS, 'If a label assembly already exists, selecting it will lead to an update of the component.')
+        'labels', 'Existing '+config.COMPONENT_NAME_LEGENDS, 'If a label assembly already exists, selecting it will lead to an update of the component.')
     sizesSelect.setSelectionLimits(0, 1)
     sizesSelect.addSelectionFilter(adsk.core.SelectionCommandInput.Occurrences)
 
@@ -158,7 +158,7 @@ def command_execute(args: adsk.core.CommandEventArgs):
         labelsOccurrence = design.rootComponent.occurrences.addNewComponent(
             trans)
         labels = labelsOccurrence.component
-        labels.name = config.COMPONENT_NAME_LABELS
+        labels.name = config.COMPONENT_NAME_LEGENDS
 
     if plane is None:
         planes = labels.constructionPlanes
