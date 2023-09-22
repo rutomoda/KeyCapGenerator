@@ -6,7 +6,6 @@ Clone or download the repo into "C:\Users\\<user\>\AppData\Roaming\Autodesk\Auto
 
 # Currently only available on the dev-branch
 ## Outstanding issues:
-- Missing icons for the commands need to be designed
 - Command Previews need to be implemented
 - Command Edit Definition for the timeline needs to implemented (see: https://help.autodesk.com/view/fusion360/ENU/?guid=GUID-FA7EF128-1DE0-4115-89A3-795551E2DEF2)
 - Failure states need to be improved: Errors during most feature operations just kill the workflow mid-step leaving half finished components
@@ -18,7 +17,8 @@ Clone or download the repo into "C:\Users\\<user\>\AppData\Roaming\Autodesk\Auto
 - Offer more options for keycap generation (automatic lofting and scaling)
 - Add "Cut switch cavity" command
 - Make it easier to apply different appearances to legends and keycaps
-- This may not probably support designs where XYZ uses the default Fusion360 orientation. Developed with X=left,right Y=front,back Z=up,down 
+- This may not probably support designs where XYZ uses the default Fusion360 orientation. Developed with X=left,right Y=front,back Z=up,down
+- Multithread generating independent entities for each position
 
 # How to use
 The add-in provides its commands in the Solid Design space of Fusion360 under the Create group. You will need to provide the following:
