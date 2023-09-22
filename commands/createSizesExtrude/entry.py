@@ -57,6 +57,23 @@ def start():
     # Specify if the command is promoted to the main toolbar.
     control.isPromoted = IS_PROMOTED
 
+    editCmdDef = ui.commandDefinitions.addButtonDefinition(
+        CMD_ID + '-edit', 
+        'Edit ' + CMD_NAME, 
+        'Edits ' + CMD_NAME, 
+        '')
+
+    # Define an event handler for the edit command created event. It will be called when the button is clicked.
+    futil.add_handler(
+        editCmdDef.commandCreated, 
+        command_created) 
+    
+    global featureDef    
+    featureDef = adsk.fusion.CustomFeatureDefinition.create(
+        CMD_ID + '-feature',
+        CMD_NAME,
+        ICON_FOLDER)
+    featureDef.editCommandId = editCmdDef.id
 
 # Executed when add-in is stopped.
 def stop():
@@ -65,7 +82,10 @@ def stop():
     panel = workspace.toolbarPanels.itemById(PANEL_ID)
     command_control = panel.controls.itemById(CMD_ID)
     command_definition = ui.commandDefinitions.itemById(CMD_ID)
+    edit_command_definition = ui.commandDefinitions.itemById(CMD_ID+'-edit')
 
+    if edit_command_definition:
+        edit_command_definition.deleteMe()
     # Delete the button command control
     if command_control:
         command_control.deleteMe()
@@ -176,6 +196,160 @@ def addRowToSizesTable(tableInput, size=200):
     tableInput.addCommandInput(spinnerInput, tableInput.rowCount, 0)
     _rowNumber = _rowNumber+1
 
+class CreateSizesExtrudeValues:
+    def __init__(
+            self, 
+            inputs: adsk.core.CommandInputs):
+        prefixInput: adsk.core.StringValueCommandInput = inputs.itemById('prefix')
+        self.namePrefix:str = prefixInput.value
+
+        rowInput: adsk.core.DropDownCommandInput = inputs.itemById('row')
+        selectedRow = rowInput.selectedItem.name
+        self.row:str = ''
+        if selectedRow != 'none':
+            self.row = selectedRow
+
+        spacing1UInput: adsk.core.ValueCommandInput = inputs.itemById('spacing1U')
+        self.spacing1U:float= spacing1UInput.value
+
+        leftInput: adsk.core.SelectionCommandInput = inputs.itemById('left')
+        self.left:adsk.fusion.BRepBody = leftInput.selection(0).entity
+        
+        rightInput: adsk.core.SelectionCommandInput = inputs.itemById('right')
+        self.right:adsk.fusion.BRepBody = rightInput.selection(0).entity
+
+        connectInput: adsk.core.SelectionCommandInput = inputs.itemById('connect')
+        self.connect:adsk.core.Base = connectInput.selection(0).entity
+
+        stemInput: adsk.core.SelectionCommandInput = inputs.itemById('stem')
+        self.stem:adsk.fusion.BRepBody = None
+        if stemInput.selectionCount == 1:
+            self.stem:adsk.fusion.BRepBody = stemInput.selection(0).entity
+
+        tableInput: adsk.core.TableCommandInput = inputs.itemById('sizes')
+        self.sizes = []
+        for tabelRow in range(tableInput.rowCount):
+            sizeInput: adsk.core.IntegerSpinnerCommandInput = tableInput.getInputAtPosition(
+                tabelRow, 0)
+            self.sizes.append(sizeInput.value) 
+        
+        sizesInput: adsk.core.SelectionCommandInput = inputs.itemById('existingAssembly')
+        self.parentComponent = None
+        if sizesInput.selectionCount == 1:
+            sizesOccurrence = sizesInput.selection(0).entity
+            self.parentComponent = sizesOccurrence.component
+
+    def areValid(self) -> bool:
+        areValid = True
+        areValid &= self.left is not None
+        areValid &= self.right is not None
+        areValid &= self.connect is not None
+        areValid &= self.sizes.count() > 0 
+        areValid &= self.spacing1U is not None and self.spacing1U != 0.0
+        return areValid
+
+class SingleSizeKeycapExtrudeGenerator:
+    def __init__(
+            self, 
+            size:int, 
+            row:str = ''):
+        self.size:int = size
+        self.row:str = row
+        self.left:adsk.fusion.BRepBody = None
+        self.right:adsk.fusion.BRepBody = None
+        self.connect:adsk.core.Base = None
+        self.stem:adsk.fusion.BRepBody = None
+        self.parentComponent:adsk.fusion.Component = None
+        self.namePrefix:str = ''
+        self.spacing1U:float = None
+
+    def __init__(
+            self,
+            size:int,
+            values:CreateSizesExtrudeValues,
+            parent:adsk.fusion.Component=None):
+        self.size:int = size
+        self.row:str = values.row
+        self.left:adsk.fusion.BRepBody = values.left
+        self.right:adsk.fusion.BRepBody = values.right
+        self.connect:adsk.core.Base = values.connect
+        self.stem:adsk.fusion.BRepBody = values.stem
+        self.namePrefix:str = values.namePrefix
+        self.spacing1U:float = values.spacing1U
+        if parent is None: 
+            self.parentComponent:adsk.fusion.Component = values.parentComponent
+        else:
+            self.parentComponent:adsk.fusion.Component = parent
+
+    def generate(self):
+        features = []
+        # First delete any component with the same name
+        nameToken = []
+        if self.namePrefix:
+            nameToken.append(self.namePrefix)
+            sizeName = SizeNameFormat.formatRowSizeName(self.row, self.size)
+        else:
+            sizeName = SizeNameFormat.formatSizeName(self.size)
+        nameToken.append(sizeName)
+        componentName = '_'.join(map(str, nameToken))
+        # Delete present components with same name (= always override) => TODO: Implement Body Update
+        for occurrence in self.parentComponent.allOccurrences:
+            if occurrence.name.startswith(componentName):
+                occurrence.deleteMe()
+        # New component for the keycap size
+        trans = adsk.core.Matrix3D.create()
+        occ = self.parentComponent.occurrences.addNewComponent(trans)
+        sizeComp = occ.component
+        sizeComp.name = componentName
+
+        distance = (self.size/100-1)*self.spacing1U
+
+        if self.size > 100:
+            extrusionInput = sizeComp.features.extrudeFeatures.createInput(
+                self.connect, adsk.fusion.FeatureOperations.NewBodyFeatureOperation)
+            extrusionDistance = adsk.core.ValueInput.createByReal(distance)
+            extrusionInput.setDistanceExtent(False, extrusionDistance)
+            extrusion = sizeComp.features.extrudeFeatures.add(extrusionInput)
+            features.append(extrusion)
+            connection = extrusion.bodies.item(0)
+
+        copyLeftFeature = sizeComp.features.copyPasteBodies.add(self.left)
+        copyLeft = copyLeftFeature.bodies.item(0)
+        features.append(copyLeft)
+        copyRightFeature = sizeComp.features.copyPasteBodies.add(self.right)
+        copyRight = copyRightFeature.bodies.item(0)
+        features.append(copyRight)
+
+        moveFeatures = sizeComp.features.moveFeatures
+        if self.size > 100:
+            translateBodyX(connection, -distance/2, moveFeatures, features)
+            translateBodyX(copyLeft, -distance/2, moveFeatures, features)
+            translateBodyX(copyRight, distance/2, moveFeatures, features)
+
+        combineFeatures = sizeComp.features.combineFeatures
+        combineBodies = adsk.core.ObjectCollection.create()
+        if self.size > 100:
+            combineBodies.add(copyLeft)
+        combineBodies.add(copyRight)
+        if self.stem is not None:
+            copyStemFeature = sizeComp.features.copyPasteBodies.add(self.stem)
+            copyStem = copyStemFeature.bodies.item(0)
+            combineBodies.add(copyStem)
+        if self.size > 100:
+            combineInput: adsk.fusion.CombineFeatureInput = combineFeatures.createInput(
+                connection, combineBodies)
+        else:
+            combineInput: adsk.fusion.CombineFeatureInput = combineFeatures.createInput(
+                copyLeft, combineBodies)
+        combineInput.isNewComponent = False
+        combineInput.isKeepToolBodies = False
+        combineInput.operation = adsk.fusion.FeatureOperations.JoinFeatureOperation
+        combineFeature = combineFeatures.add(combineInput)
+        features.append(combineFeature)
+        combineFeature.bodies.item(0).name = sizeComp.name
+
+        return features
+
 
 # This event handler is called when the user clicks the OK button in the command dialog or
 # is immediately called after the created event not command inputs were created for the dialog.
@@ -185,71 +359,44 @@ def command_execute(args: adsk.core.CommandEventArgs):
 
     # Get a reference to your command's inputs.
     inputs = args.command.commandInputs
-
-    # Read inputs
-    prefix: adsk.core.StringValueCommandInput = inputs.itemById('prefix')
-    rowInput: adsk.core.DropDownCommandInput = inputs.itemById('row')
-    selectedRow = rowInput.selectedItem.name
-    row = ''
-    if selectedRow != 'none':
-        row = selectedRow
-    spacing1U: adsk.core.ValueCommandInput = inputs.itemById('spacing1U')
-    leftInput: adsk.core.SelectionCommandInput = inputs.itemById('left')
-    left = leftInput.selection(0).entity
-    rightInput: adsk.core.SelectionCommandInput = inputs.itemById('right')
-    right = rightInput.selection(0).entity
-    connectInput: adsk.core.SelectionCommandInput = inputs.itemById('connect')
-    connect = connectInput.selection(0).entity
-    stemInput: adsk.core.SelectionCommandInput = inputs.itemById('stem')
-    if stemInput.selectionCount == 1:
-        stem = stemInput.selection(0).entity
-    else:
-        stem = None
-    tableInput: adsk.core.TableCommandInput = inputs.itemById('sizes')
-    sizes = []
-    for tabelRow in range(tableInput.rowCount):
-        sizeInput: adsk.core.IntegerSpinnerCommandInput = tableInput.getInputAtPosition(
-            tabelRow, 0)
-        sizes.append(sizeInput.value)
-    futil.log(f'{CMD_NAME} creating sizes: ' + '; '.join(map(str, sizes)))
+  
+    values = CreateSizesExtrudeValues(inputs)
+    futil.log(f'{CMD_NAME} creating sizes: ' + '; '.join(map(str, values.sizes)))
 
     affixes = [config.COMPONENT_NAME_SIZES]
-    if prefix.value:
-        affixes.append(prefix.value)
+    if values.namePrefix.value:
+        affixes.append(values.namePrefix.value)
 
-    sizesInput: adsk.core.SelectionCommandInput = inputs.itemById(
-        'existingAssembly')
-    if sizesInput.selectionCount == 1:
-        sizesOccurrence = sizesInput.selection(0).entity
-        assemblyComponent = sizesOccurrence.component
-    else:
+    parentComponent = values.parentComponent
+    if parentComponent is None:
         # Create new assembly component
         design = adsk.fusion.Design.cast(app.activeProduct)
         trans = adsk.core.Matrix3D.create()
         occ = design.rootComponent.occurrences.addNewComponent(trans)
         # Get the associated component.
-        assemblyComponent = occ.component
-        assemblyComponent.name = '_'.join(map(str, affixes))
+        parentComponent = occ.component
+        parentComponent.name = '_'.join(map(str, affixes))
 
-    for size in sizes:
-        createSize(size,
-                   spacing1U.value,
-                   assemblyComponent,
-                   left,
-                   right,
-                   connect,
-                   stem,
-                   prefix.value,
-                   row)
+    for size in values.sizes:
+        generator = SingleSizeKeycapExtrudeGenerator(
+            size, 
+            values, 
+            parentComponent)
+        generator.generate()
         # Call doEvents to give Fusion 360 a chance to react.
         adsk.doEvents()
 
 
 # This event handler is called when the command needs to compute a new preview in the graphics window.
 def command_preview(args: adsk.core.CommandEventArgs):
-    # General logging for debug.
-    futil.log(f'{CMD_NAME} Command Preview Event')
     inputs = args.command.commandInputs
+    '''
+    # Currently even just creating a single keycap seems way too performance expensive
+    values = CreateSizesExtrudeValues(inputs)
+    design = adsk.fusion.Design.cast(app.activeProduct)
+    SingleSizeKeycapExtrudeGenerator(200, values, design.activeComponent).generate()
+    '''
+    args.isValidResult = False
 
 
 # This event handler is called when the user changes anything in the command dialog
@@ -257,11 +404,7 @@ def command_preview(args: adsk.core.CommandEventArgs):
 def command_input_changed(args: adsk.core.InputChangedEventArgs):
     changed_input = args.input
     inputs = args.inputs
-
-    # General logging for debug.
-    futil.log(
-        f'{CMD_NAME} Input Changed Event fired from a change to {changed_input.id}')
-
+    # Button click handling for the table buttons
     if changed_input.id == 'sizeAdd':
         addRowToSizesTable(inputs.itemById('sizes'))
 
@@ -281,109 +424,17 @@ def command_input_changed(args: adsk.core.InputChangedEventArgs):
 # This event handler is called when the user interacts with any of the inputs in the dialog
 # which allows you to verify that all of the inputs are valid and enables the OK button.
 def command_validate_input(args: adsk.core.ValidateInputsEventArgs):
-    # General logging for debug.
-    futil.log(f'{CMD_NAME} Validate Input Event')
-
     inputs = args.inputs
-
-    # Verify the validity of the input values. This controls if the OK button is enabled or not.
-    spacing1Uinput = inputs.itemById('spacing1U')
-    if spacing1Uinput is None or not spacing1Uinput.value > 0:
-        args.areInputsValid = False
-        futil.log(f'{CMD_NAME} invalid: spacing1U field empty')
-        return
-
-    sizesTableInput = inputs.itemById('sizes')
-    if sizesTableInput.rowCount == 0:
-        args.areInputsValid = False
-        futil.log(f'{CMD_NAME} invalid: sizes table empty')
-        return
-
-    args.areInputsValid = True
+    values = CreateSizesExtrudeValues(inputs)
+    args.areInputsValid = values.areValid()
 
 
 # This event handler is called when the command terminates.
 def command_destroy(args: adsk.core.CommandEventArgs):
-    # General logging for debug.
-    futil.log(f'{CMD_NAME} Command Destroy Event')
-
     global local_handlers
     local_handlers = []
 
-
-def createSize(
-        size: int,
-        spacing1U,
-        assemblyComponent: adsk.fusion.Component,
-        left,
-        right,
-        connect,
-        stem,
-        prefix: str = '',
-        row: str = ''):
-    # First delete any component with the same name
-    nameToken = []
-    if prefix:
-        nameToken.append(prefix)
-    if row:
-        sizeName = SizeNameFormat.formatRowSizeName(row, size)
-    else:
-        sizeName = SizeNameFormat.formatSizeName(size)
-    nameToken.append(sizeName)
-    componentName = '_'.join(map(str, nameToken))
-    for occurrence in assemblyComponent.allOccurrences:
-        if occurrence.name.startswith(componentName):
-            occurrence.deleteMe()
-    # New component for the keycap size
-    trans = adsk.core.Matrix3D.create()
-    occ = assemblyComponent.occurrences.addNewComponent(trans)
-    sizeComp = occ.component
-    sizeComp.name = componentName
-
-    distance = (size/100-1)*spacing1U
-
-    if size > 100:
-        extrusionInput = sizeComp.features.extrudeFeatures.createInput(
-            connect, adsk.fusion.FeatureOperations.NewBodyFeatureOperation)
-        extrusionDistance = adsk.core.ValueInput.createByReal(distance)
-        extrusionInput.setDistanceExtent(False, extrusionDistance)
-        extrusion = sizeComp.features.extrudeFeatures.add(extrusionInput)
-        connection = extrusion.bodies.item(0)
-
-    copyLeftFeature = sizeComp.features.copyPasteBodies.add(left)
-    copyLeft = copyLeftFeature.bodies.item(0)
-    copyRightFeature = sizeComp.features.copyPasteBodies.add(right)
-    copyRight = copyRightFeature.bodies.item(0)
-
-    moveFeatures = sizeComp.features.moveFeatures
-    if size > 100:
-        translateBodyX(connection, -distance/2, moveFeatures)
-        translateBodyX(copyLeft, -distance/2, moveFeatures)
-        translateBodyX(copyRight, distance/2, moveFeatures)
-
-    combineFeatures = sizeComp.features.combineFeatures
-    combineBodies = adsk.core.ObjectCollection.create()
-    if size > 100:
-        combineBodies.add(copyLeft)
-    combineBodies.add(copyRight)
-    if stem is not None:
-        copyStemFeature = sizeComp.features.copyPasteBodies.add(stem)
-        copyStem = copyStemFeature.bodies.item(0)
-        combineBodies.add(copyStem)
-    if size > 100:
-        combineInput: adsk.fusion.CombineFeatureInput = combineFeatures.createInput(
-            connection, combineBodies)
-    else:
-        combineInput: adsk.fusion.CombineFeatureInput = combineFeatures.createInput(
-            copyLeft, combineBodies)
-    combineInput.isNewComponent = False
-    combineInput.isKeepToolBodies = False
-    combineInput.operation = adsk.fusion.FeatureOperations.JoinFeatureOperation
-    combineFeature = combineFeatures.add(combineInput)
-    combineFeature.bodies.item(0).name = sizeComp.name
-
-
-def translateBodyX(body, distance, moveFeatures):
+def translateBodyX(body, distance, moveFeatures, features):
     vector = adsk.core.Vector3D.create(distance, 0.0, 0.0)
     transform = adsk.core.Matrix3D.create()
     transform.setToIdentity
@@ -391,4 +442,5 @@ def translateBodyX(body, distance, moveFeatures):
     bodies = adsk.core.ObjectCollection.create()
     bodies.add(body)
     moveInput = moveFeatures.createInput(bodies, transform)
-    moveFeatures.add(moveInput)
+    moveFeature = moveFeatures.add(moveInput)
+    features.append(moveFeature)
