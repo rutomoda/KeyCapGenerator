@@ -3,28 +3,16 @@ import adsk.fusion
 import os
 from ...lib import fusion360utils as futil
 from ... import config
-from ...common.keyCapGeneratorUtil import SizeNameFormat
+from ...common.keyCapGeneratorUtil import SizeNameFormat, KCGCommand
 
 
 app = adsk.core.Application.get()
 ui = app.userInterface
 
-
-# TODO *** Specify the command identity information. ***
-CMD_ID = f'{config.COMPANY_NAME}_{config.ADDIN_NAME}_createSizesExtrude'
-CMD_NAME = 'KCG: Create Sizes with Extrude'
-CMD_Description = 'Create keycap sizes by extruding between to 1U halfs'
-
-# Specify that the command will be promoted to the panel.
-IS_PROMOTED = True
-
-# *** Define the location where the command button will be created. ***
-# This is done by specifying the workspace, the tab, and the panel, and the
-# command it will be inserted beside. Not providing the command to position it
-# will insert it at the end.
-WORKSPACE_ID = config.WORKSPACE_ID
-PANEL_ID = config.PANEL_ID
-COMMAND_BESIDE_ID = ''  # first command in suite
+kcgCommand = KCGCommand(
+    config.CMD_CREATE_SIZES_EXTRUDE_ID, 
+    'KCG: Create Sizes with Extrude',
+    'Create keycap sizes by extruding between to 1U halfs')
 
 # Resource location for command icons, here we assume a sub folder in this directory named "resources".
 ICON_FOLDER = os.path.join(os.path.dirname(
@@ -37,71 +25,17 @@ local_handlers = []
 
 # Executed when add-in is run.
 def start():
-    # Create a command Definition.
-    cmd_def = ui.commandDefinitions.addButtonDefinition(
-        CMD_ID, CMD_NAME, CMD_Description, ICON_FOLDER)
-
-    # Define an event handler for the command created event. It will be called when the button is clicked.
-    futil.add_handler(cmd_def.commandCreated, command_created)
-
-    # ******** Add a button into the UI so the user can run the command. ********
-    # Get the target workspace the button will be created in.
-    workspace = ui.workspaces.itemById(WORKSPACE_ID)
-
-    # Get the panel the button will be created in.
-    panel = workspace.toolbarPanels.itemById(PANEL_ID)
-
-    # Create the button command control in the UI after the specified existing command.
-    control = panel.controls.addCommand(cmd_def, COMMAND_BESIDE_ID, False)
-
-    # Specify if the command is promoted to the main toolbar.
-    control.isPromoted = IS_PROMOTED
-
-    editCmdDef = ui.commandDefinitions.addButtonDefinition(
-        CMD_ID + '-edit', 
-        'Edit ' + CMD_NAME, 
-        'Edits ' + CMD_NAME, 
-        '')
-
-    # Define an event handler for the edit command created event. It will be called when the button is clicked.
-    futil.add_handler(
-        editCmdDef.commandCreated, 
-        command_created) 
-    
-    global featureDef    
-    featureDef = adsk.fusion.CustomFeatureDefinition.create(
-        CMD_ID + '-feature',
-        CMD_NAME,
-        ICON_FOLDER)
-    featureDef.editCommandId = editCmdDef.id
+    kcgCommand.editCreatedCallback = command_created
+    kcgCommand.commandCreatedCallback = command_created
+    kcgCommand.start(ui, ICON_FOLDER)
 
 # Executed when add-in is stopped.
 def stop():
-    # Get the various UI elements for this command
-    workspace = ui.workspaces.itemById(WORKSPACE_ID)
-    panel = workspace.toolbarPanels.itemById(PANEL_ID)
-    command_control = panel.controls.itemById(CMD_ID)
-    command_definition = ui.commandDefinitions.itemById(CMD_ID)
-    edit_command_definition = ui.commandDefinitions.itemById(CMD_ID+'-edit')
-
-    if edit_command_definition:
-        edit_command_definition.deleteMe()
-    # Delete the button command control
-    if command_control:
-        command_control.deleteMe()
-
-    # Delete the command definition
-    if command_definition:
-        command_definition.deleteMe()
-
+    kcgCommand.stop(ui)
 
 # Function that is called when a user clicks the corresponding button in the UI.
 # This defines the contents of the command dialog and connects to the command related events.
 def command_created(args: adsk.core.CommandCreatedEventArgs):
-    # General logging for debug.
-    futil.log(f'{CMD_NAME} Command Created Event')
-
-    # https://help.autodesk.com/view/fusion360/ENU/?contextId=CommandInputs
     inputs = args.command.commandInputs
 
     # TODO Validate only Alphnum char inputs
@@ -244,7 +178,7 @@ class CreateSizesExtrudeValues:
         areValid &= self.left is not None
         areValid &= self.right is not None
         areValid &= self.connect is not None
-        areValid &= self.sizes.count() > 0 
+        areValid &= len(self.sizes) > 0 
         areValid &= self.spacing1U is not None and self.spacing1U != 0.0
         return areValid
 
@@ -354,23 +288,29 @@ class SingleSizeKeycapExtrudeGenerator:
 # This event handler is called when the user clicks the OK button in the command dialog or
 # is immediately called after the created event not command inputs were created for the dialog.
 def command_execute(args: adsk.core.CommandEventArgs):
-    # General logging for debug.
-    futil.log(f'{CMD_NAME} Command Execute Event')
-
-    # Get a reference to your command's inputs.
     inputs = args.command.commandInputs
-  
     values = CreateSizesExtrudeValues(inputs)
-    futil.log(f'{CMD_NAME} creating sizes: ' + '; '.join(map(str, values.sizes)))
+    futil.log(f'Creating sizes: ' + '; '.join(map(str, values.sizes)))
 
     affixes = [config.COMPONENT_NAME_SIZES]
-    if values.namePrefix.value:
-        affixes.append(values.namePrefix.value)
+    if values.namePrefix:
+        affixes.append(values.namePrefix)
+
+    
+    design = adsk.fusion.Design.cast(app.activeProduct)
+    featureComponent = design.activeComponent
+    timeline = design.timeline
+
+    kcgCommand.startExecution(timeline)
+    # Since the first timeline entry is going to be Occurrence we create move features before
+    # so we can use the custom feature functionality
+    kcgCommand.wiggleForExecutionTimeline(
+        values.left, 
+        featureComponent.features.moveFeatures)
 
     parentComponent = values.parentComponent
     if parentComponent is None:
         # Create new assembly component
-        design = adsk.fusion.Design.cast(app.activeProduct)
         trans = adsk.core.Matrix3D.create()
         occ = design.rootComponent.occurrences.addNewComponent(trans)
         # Get the associated component.
@@ -382,9 +322,14 @@ def command_execute(args: adsk.core.CommandEventArgs):
             size, 
             values, 
             parentComponent)
-        generator.generate()
+        ops = generator.generate()
         # Call doEvents to give Fusion 360 a chance to react.
         adsk.doEvents()
+
+    kcgCommand.endExecution(
+        timeline, 
+        featureComponent)
+    
 
 
 # This event handler is called when the command needs to compute a new preview in the graphics window.

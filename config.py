@@ -52,3 +52,32 @@ COMPONENT_NAME_SIZES = 'KCG-Sizes-Assembly'
 COMPONENT_NAME_LAYOUT = 'KCG-Layout-Assembly'
 COMPONENT_NAME_LABELS = 'KCG-Labels-Assembly'
 COMPONENT_NAME_LABELED = 'KCG-Labeled-Sizes-Assembly'
+
+def toId(idTag:str) -> str: 
+   return f'{COMPANY_NAME}_{ADDIN_NAME}_{idTag}'
+
+class KCG_ID:
+    def __init__(self, id:str, besideId:str=''):
+        self.id:str = id
+        self.besideId:str = id
+
+CMD_CREATE_SIZES_EXTRUDE_ID = KCG_ID(
+   toId('createSizesExtrude'))
+CMD_ADD_STEMS_ID = KCG_ID(
+    toId('addStems'),
+    CMD_CREATE_SIZES_EXTRUDE_ID.id
+)
+CMD_INITIATE_LEGEND_SKETCHES_ID = KCG_ID(
+    toId('initiateLegendSketches'),
+    CMD_ADD_STEMS_ID.id
+)
+CMD_APPLY_LEGENDS_ID = KCG_ID(
+    toId('applyLegendes'),
+    CMD_INITIATE_LEGEND_SKETCHES_ID.id
+)
+CMD_GENERATE_LAYOUT_ID = KCG_ID(
+    toId('generateLayout'),
+    CMD_APPLY_LEGENDS_ID.id
+)
+
+
