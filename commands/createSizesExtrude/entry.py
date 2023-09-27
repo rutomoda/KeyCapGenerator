@@ -296,17 +296,7 @@ def command_execute(args: adsk.core.CommandEventArgs):
     if values.namePrefix:
         affixes.append(values.namePrefix)
 
-    
     design = adsk.fusion.Design.cast(app.activeProduct)
-    featureComponent = design.activeComponent
-    timeline = design.timeline
-
-    kcgCommand.startExecution(timeline)
-    # Since the first timeline entry is going to be Occurrence we create move features before
-    # so we can use the custom feature functionality
-    kcgCommand.wiggleForExecutionTimeline(
-        values.left, 
-        featureComponent.features.moveFeatures)
 
     parentComponent = values.parentComponent
     if parentComponent is None:
@@ -325,11 +315,6 @@ def command_execute(args: adsk.core.CommandEventArgs):
         ops = generator.generate()
         # Call doEvents to give Fusion 360 a chance to react.
         adsk.doEvents()
-
-    kcgCommand.endExecution(
-        timeline, 
-        featureComponent)
-    
 
 
 # This event handler is called when the command needs to compute a new preview in the graphics window.

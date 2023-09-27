@@ -118,10 +118,6 @@ def command_execute(args: adsk.core.CommandEventArgs):
     embossDepthInput: adsk.core.ValueCommandInput = inputs.itemById('embossDepth')
     embossDepth = embossDepthInput.value
 
-    featureComponent = design.activeComponent
-    timeline = design.timeline
-    kcgCommand.startExecution(timeline)
-
     trans = adsk.core.Matrix3D.create()
     labeledSizesOccurrence = design.rootComponent.occurrences.addNewComponent(
         trans)
@@ -162,9 +158,6 @@ def command_execute(args: adsk.core.CommandEventArgs):
     if not labeledSizeComponents:
         labeledSizesOccurrence.deleteMe()
 
-    kcgCommand.endExecution(
-        timeline, 
-        featureComponent),
     # TODO UI Output non found sizes, inform if nothing was created
 
 

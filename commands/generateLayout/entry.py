@@ -99,9 +99,6 @@ def command_execute(args: adsk.core.CommandEventArgs):
 
     # Create new assembly component
     design = adsk.fusion.Design.cast(app.activeProduct)
-    featureComponent = design.activeComponent
-    timeline = design.timeline
-    kcgCommand.startExecution(timeline)
 
     trans = adsk.core.Matrix3D.create()
     layoutOccurrence = design.rootComponent.occurrences.addNewComponent(trans)
@@ -122,10 +119,6 @@ def command_execute(args: adsk.core.CommandEventArgs):
             notFound.append(position)
         # Call doEvents to give Fusion 360 a chance to react.
         adsk.doEvents()
-
-    kcgCommand.endExecution(
-        timeline, 
-        featureComponent)
 
 
 # This event handler is called when the command needs to compute a new preview in the graphics window.

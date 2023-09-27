@@ -122,10 +122,6 @@ def command_execute(args: adsk.core.CommandEventArgs):
     # Select childOccurences
     design = adsk.fusion.Design.cast(app.activeProduct)
 
-    featureComponent = design.activeComponent
-    timeline = design.timeline
-    kcgCommand.startExecution(timeline)
-
     sizeOccurrenceList = None
     if sizes == design.rootComponent:
         sizeOccurrenceList = sizes.occurrences.asList
@@ -144,10 +140,6 @@ def command_execute(args: adsk.core.CommandEventArgs):
         # Call doEvents to give Fusion 360 a chance to react.
         adsk.doEvents()
     
-    kcgCommand.endExecution(
-        timeline, 
-        featureComponent)
-
 
 # This event handler is called when the command needs to compute a new preview in the graphics window.
 def command_preview(args: adsk.core.CommandEventArgs):
