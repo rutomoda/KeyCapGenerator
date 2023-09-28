@@ -87,7 +87,7 @@ def command_execute(args: adsk.core.CommandEventArgs):
     sizes = KCGComponent(sizesInput.selection(0).entity.component)
     kleRawInput: adsk.core.TextBoxCommandInput = inputs.itemById('kleRaw')
     kle = KLE(kleRawInput.text)
-    positions = kle.getKLEPostions()
+    positions = kle.getKLEPositions()
 
     labeledSizesInput: adsk.core.SelectionCommandInput = inputs.itemById(
         'labeledSizes')

@@ -1,3 +1,4 @@
+from __future__ import annotations
 from ... import config
 from ...lib import fusion360utils as futil
 import adsk.fusion
@@ -10,7 +11,8 @@ import os
 import adsk.core
 from pathlib import Path
 
-from ...common.keyCapGeneratorUtil import KCGCommand
+from ...common.keyCapGeneratorUtil import KCGCommand, KCGCustomFeature
+from ...common.keyboardLayoutEditor import KLE, KLEPosition
 
 from fontTools import ttLib
 
@@ -33,7 +35,7 @@ local_handlers = []
 
 # Executed when add-in is run.
 def start():
-    kcgCommand.editCreatedCallback = command_created
+    kcgCommand.editCreatedCallback = command_created_edit
     kcgCommand.commandCreatedCallback = command_created
     kcgCommand.start(ui, ICON_FOLDER)
 
@@ -41,19 +43,80 @@ def start():
 def stop():
     kcgCommand.stop(ui)
 
+class InitiateLegendSketchesValues:
+    def __init__(self) -> None:
+        self.kleRaw:str = None
+        self.positions: list[KLEPosition] = []
+        self.legendsComponent: adsk.fusion.Component = None
+        self.legendsPlane: adsk.fusion.ConstructionPlane = None 
+        self.offset: float = None
+        self.angle: float = None
+        self.font: str = None
+        self.fontSize: float = None
+        self.fontXOffset: float = None
+        self.fontYOffset: float = None
+        self.fontStyle = None
 
-# Function that is called when a user clicks the corresponding button in the UI.
-# This defines the contents of the command dialog and connects to the command related events.
-def command_created(args: adsk.core.CommandCreatedEventArgs):
-    inputs = args.command.commandInputs
+    @classmethod
+    def read(
+            cls,
+            inputs: adsk.core.CommandInputs) -> InitiateLegendSketchesValues:
+        values = cls()
+        kleRawInput: adsk.core.TextBoxCommandInput = inputs.itemById('kleRaw')
+        values.kleRaw = kleRawInput.text 
+        kle = KLE(kleRawInput.text)
+        values.positions: list[KLEPosition] = kle.getKLEPositions()
 
+        legendsInput: adsk.core.SelectionCommandInput = inputs.itemById('legends')
+        if legendsInput.selectionCount == 1:
+            legendsOccurrence = legendsInput.selection(0).entity
+            values.legendsComponent = legendsOccurrence.component
+
+        planeInput: adsk.core.SelectionCommandInput = inputs.itemById(
+            'legendPlane')
+        if planeInput.selectionCount == 1:
+            values.legendsPlane: adsk.fusion.ConstructionPlane = planeInput.selection(0).entity
+        else:
+            values.legendsPlane: adsk.fusion.ConstructionPlane = None
+
+        offsetInput: adsk.core.ValueCommandInput = inputs.itemById(
+            'sketchDistance')
+        values.offset = offsetInput.value
+        angleInput: adsk.core.ValueCommandInput = inputs.itemById(
+            'sketchAngle')
+        values.angle = angleInput.value
+
+        fontInput: adsk.core.DropDownCommandInput = inputs.itemById('font')
+        selectedFont = fontInput.selectedItem
+        values.font = selectedFont.name
+        fontSizeInput: adsk.core.ValueCommandInput = inputs.itemById('fontSize')
+        values.fontSize = fontSizeInput.value
+        fontXOffsetInput: adsk.core.ValueCommandInput = inputs.itemById(
+            'fontXOffset')
+        values.fontXOffset = fontXOffsetInput.value
+        fontYOffsetInput: adsk.core.ValueCommandInput = inputs.itemById(
+            'fontYOffset')
+        values.fontYOffset = fontYOffsetInput.value
+
+        values.fontStyle = None # TODO
+        return values
+  
+
+def createInitiateLegendSketchesGui(
+        inputs: adsk.core.CommandInputs,
+        values: InitiateLegendSketchesValues = InitiateLegendSketchesValues()):
     inputs.addTextBoxCommandInput(
-        'kleRaw', 'KLE Raw Data', '["Q","W","E","R"],["A","S","D","F"]', 7, False)
-
-    sizesSelect = inputs.addSelectionInput(
-        'labels', 'Existing '+config.COMPONENT_NAME_LEGENDS, 'If a label assembly already exists, selecting it will lead to an update of the component.')
-    sizesSelect.setSelectionLimits(0, 1)
-    sizesSelect.addSelectionFilter(adsk.core.SelectionCommandInput.Occurrences)
+        'kleRaw', 
+        'KLE Raw Data', 
+        values.kleRaw if values.kleRaw else '["Q","W","E","R"],["A","S","D","F"]', 
+        7, 
+        False)
+    legendsComponentSelect = inputs.addSelectionInput(
+        'legends', 
+        'Existing '+config.COMPONENT_NAME_LEGENDS, 
+        'If a label assembly already exists, selecting it will lead to an update of the component.')
+    legendsComponentSelect.setSelectionLimits(0, 1)
+    legendsComponentSelect.addSelectionFilter(adsk.core.SelectionCommandInput.Occurrences)
 
     sketchConstructionInput = inputs.addGroupCommandInput(
         'sketchConstruction', 'Sketch Construction Config')
@@ -67,9 +130,16 @@ def command_created(args: adsk.core.CommandCreatedEventArgs):
         adsk.core.SelectionCommandInput.ConstructionPlanes)
     # ...or config a new one
     sketchDistanceInput = sketchConstructionInputs.addValueInput(
-        'sketchDistance', 'Sketch Distance', 'mm', adsk.core.ValueInput.createByReal(1.1))
+        'sketchDistance', 
+        'Sketch Distance', 
+        'mm', 
+        adsk.core.ValueInput.createByReal(
+            values.offset if values.offset else 1.1))
     sketchAngleInput = sketchConstructionInputs.addAngleValueCommandInput(
-        'sketchAngle', 'Sketch Angle', adsk.core.ValueInput.createByReal(0.0))
+        'sketchAngle', 
+        'Sketch Angle', 
+        adsk.core.ValueInput.createByReal(
+            values.angle if values.angle else 0.0))
 
     fontConfigInput = inputs.addGroupCommandInput(
         'fontConfig', 'Font Config')
@@ -79,145 +149,213 @@ def command_created(args: adsk.core.CommandCreatedEventArgs):
     fonts = getFontList()
 
     fontInput = fontConfigInputs.addDropDownCommandInput(
-        'font', 'Font', adsk.core.DropDownStyles.TextListDropDownStyle)
+        'font', 
+        'Font', 
+        adsk.core.DropDownStyles.TextListDropDownStyle)
     fontItems = fontInput.listItems
+    wasSelected = False
     for font in fonts.keys():
-        fontItems.add(font, False)
-    fontItems[0].isSelected = True
+        isSelected =values.font == font 
+        fontItems.add(font, isSelected)
+        wasSelected |= isSelected
+    if not wasSelected:
+        fontItems[0].isSelected = True
 
     fontSizeInput = fontConfigInputs.addValueInput(
-        'fontSize', 'Font Size', 'mm', adsk.core.ValueInput.createByReal(0.4))
+        'fontSize', 
+        'Font Size', 
+        'mm', 
+        adsk.core.ValueInput.createByReal(
+            values.fontSize if values.fontSize else 0.4))
     fontXOffsetInput = fontConfigInputs.addValueInput(
-        'fontXOffset', 'Font X Offset', 'mm', adsk.core.ValueInput.createByReal(0.0))
+        'fontXOffset', 
+        'Font X Offset', 
+        'mm', 
+        adsk.core.ValueInput.createByReal(
+            values.fontXOffset if values.fontXOffset else 0.0))
     fontYOffsetInput = fontConfigInputs.addValueInput(
-        'fontYOffset', 'Font Y Offset', 'mm', adsk.core.ValueInput.createByReal(0.0))
-    # TODO: Bold, italic, rotation, KLE label position
+        'fontYOffset', 
+        'Font Y Offset', 
+        'mm', 
+        adsk.core.ValueInput.createByReal(
+            values.fontYOffset if values.fontYOffset else 0.0))
 
-    futil.add_handler(args.command.execute, command_execute,
+
+# Function that is called when a user clicks the corresponding button in the UI.
+# This defines the contents of the command dialog and connects to the command related events.
+def command_created(args: adsk.core.CommandCreatedEventArgs):
+    inputs = args.command.commandInputs
+
+    createInitiateLegendSketchesGui(inputs)
+
+    futil.add_handler(args.command.execute, 
+                      command_execute,
                       local_handlers=local_handlers)
     futil.add_handler(args.command.inputChanged,
-                      command_input_changed, local_handlers=local_handlers)
+                      command_input_changed, 
+                      local_handlers=local_handlers)
     futil.add_handler(args.command.executePreview,
-                      command_preview, local_handlers=local_handlers)
+                      command_preview, 
+                      local_handlers=local_handlers)
     futil.add_handler(args.command.validateInputs,
-                      command_validate_input, local_handlers=local_handlers)
-    futil.add_handler(args.command.destroy, command_destroy,
+                      command_validate_input, 
+                      local_handlers=local_handlers)
+    futil.add_handler(args.command.destroy, 
+                      command_destroy,
                       local_handlers=local_handlers)
 
+def command_created_edit(args: adsk.core.CommandCreatedEventArgs):
+    inputs = args.command.commandInputs
+
+    customFeature: adsk.fusion.CustomFeature = ui.activeSelections.item(0).entity
+    fontSize: adsk.fusion.CustomFeatureParameter = customFeature.parameters.itemById('legendsFontSize')
+    
+    values = InitiateLegendSketchesValues()
+    values.fontSize = fontSize.value
+
+    createInitiateLegendSketchesGui(
+        inputs,
+        values)
+    
+    futil.add_handler(args.command.execute, 
+                      command_execute,
+                      local_handlers=local_handlers)
+    futil.add_handler(args.command.inputChanged,
+                      command_input_changed, 
+                      local_handlers=local_handlers)
+    futil.add_handler(args.command.executePreview,
+                      command_preview, 
+                      local_handlers=local_handlers)
+    futil.add_handler(args.command.validateInputs,
+                      command_validate_input, 
+                      local_handlers=local_handlers)
+    futil.add_handler(args.command.destroy, 
+                      command_destroy,
+                      local_handlers=local_handlers)
+
+class LegendSketchGenerator:
+    def __init__(
+            self, 
+            parent: adsk.fusion.Component,
+            values: InitiateLegendSketchesValues,
+            label: str) -> None:
+        self.parent = parent
+        self.sketchPlane = values.legendsPlane
+        # Sketches do not need to be centered on origin
+        sketchTranslation = self.sketchPlane.transform.translation
+        self.cornerPoint = adsk.core.Point3D.create(
+            -values.fontSize*30 + values.fontXOffset - sketchTranslation.x,
+            values.fontSize*3 + values.fontYOffset - sketchTranslation.y,
+            0)
+        self.diagonalPoint = adsk.core.Point3D.create(
+            values.fontSize*30 + values.fontXOffset - sketchTranslation.x,
+            -values.fontSize*3 + values.fontYOffset - sketchTranslation.y,
+            0)
+        self.label = label
+        self.font = values.font
+        self.fontSize = values.fontSize
+        self.fontStyle = values.fontStyle
+
+    def generate(self):
+        oldSketch = self.parent.sketches.itemByName(self.label)
+        if oldSketch:
+            self.updateSketch(oldSketch)
+        else:
+            self.newSketch()
+            
+    def updateSketch(
+            self,
+            sketch: adsk.fusion.Sketch):
+        texts = sketch.sketchTexts
+        for text in texts:
+            if text.text == self.label:
+                text.fontName = self.font
+                text.height = self.fontSize
+                if self.fontStyle:
+                    text.textStyle = self.fontStyle
+                # TODO update offsets
+
+    def newSketch(
+            self):
+        sketches = self.parent.sketches
+        sketch = sketches.add(self.sketchPlane)
+        sketch.name = self.label
+        texts = sketch.sketchTexts
+        labelInput = texts.createInput2(
+            self.label,
+            self.fontSize)
+        labelInput.setAsMultiLine(
+            self.cornerPoint,
+            self.diagonalPoint,
+            adsk.core.HorizontalAlignments.CenterHorizontalAlignment,
+            adsk.core.VerticalAlignments.MiddleVerticalAlignment,
+            0.0)
+        labelInput.fontName = self.font
+        texts.add(labelInput)
+
+        
 
 # This event handler is called when the user clicks the OK button in the command dialog or
 # is immediately called after the created event not command inputs were created for the dialog.
 def command_execute(args: adsk.core.CommandEventArgs):
     inputs = args.command.commandInputs
-    kleRawInput: adsk.core.TextBoxCommandInput = inputs.itemById('kleRaw')
-    kleJson = fixKLERaw2Json(kleRawInput.text)
-    positions = readKLEjson(kleJson)
-
-    labelsInput: adsk.core.SelectionCommandInput = inputs.itemById('labels')
-    labels:adsk.fusion.Component = None
-    if labelsInput.selectionCount == 1:
-        labelsOccurrence = labelsInput.selection(0).entity
-        labels = labelsOccurrence.component
-
-    planeInput: adsk.core.SelectionCommandInput = inputs.itemById(
-        'legendPlane')
-    if planeInput.selectionCount == 1:
-        plane = planeInput.selection(0).entity
-    else:
-        plane = None
-
-    offsetInput: adsk.core.ValueCommandInput = inputs.itemById(
-        'sketchDistance')
-    offset = offsetInput.value
-    angleInput: adsk.core.ValueCommandInput = inputs.itemById(
-        'sketchAngle')
-    angle = angleInput.value
-
-    fontInput: adsk.core.DropDownCommandInput = inputs.itemById('font')
-    selectedFont = fontInput.selectedItem
-    font = selectedFont.name
-    fontSizeInput: adsk.core.ValueCommandInput = inputs.itemById('fontSize')
-    fontSize = fontSizeInput.value
-    fontXOffsetInput: adsk.core.ValueCommandInput = inputs.itemById(
-        'fontXOffset')
-    fontXOffset = fontXOffsetInput.value
-    fontYOffsetInput: adsk.core.ValueCommandInput = inputs.itemById(
-        'fontYOffset')
-    fontYOffset = fontYOffsetInput.value
-
+    values = InitiateLegendSketchesValues.read(inputs)
     # Create new assembly component
 
     design = adsk.fusion.Design.cast(app.activeProduct)
-    featureComponent = design.activeComponent
-    timeline = design.timeline
+    activeComponent = design.activeComponent
 
-    kcgCommand.startExecution(timeline)
-
-    if labels is None:
+    # Create legends component if not selected
+    sketchComponent = values.legendsComponent
+    if sketchComponent is None:
         trans = adsk.core.Matrix3D.create()
-        labelsOccurrence = design.rootComponent.occurrences.addNewComponent(
-            trans)
-        labels = labelsOccurrence.component
-        labels.name = config.COMPONENT_NAME_LEGENDS
-
-    if plane is None:
-        planes = labels.constructionPlanes
-        if angle is not None and angle != 0.0:
+        labelsOccurrence = activeComponent.occurrences.addNewComponent(trans)
+        sketchComponent = labelsOccurrence.component
+        sketchComponent.name = config.COMPONENT_NAME_LEGENDS
+        values.legendsComponent = sketchComponent
+    # Start feature (currently cannot capture occurrence creation decently)
+    feature = KCGCustomFeature(
+        kcgCommand.featureDefinition, 
+        design.timeline, 
+        activeComponent)
+    feature.startExecution()
+    # Create sketch plane if not selected
+    if values.legendsPlane is None:
+        planes = sketchComponent.constructionPlanes
+        if values.angle is not None and values.angle != 0.0:
             anglePlaneInput = planes.createInput()
             anglePlaneInput.setByAngle(
-                labels.xConstructionAxis,
-                adsk.core.ValueInput.createByReal(angle),
-                labels.xYConstructionPlane)
+                sketchComponent.xConstructionAxis,
+                adsk.core.ValueInput.createByReal(values.angle),
+                sketchComponent.xYConstructionPlane)
             basePlane = planes.add(anglePlaneInput)
             basePlane.isLightBulbOn = False
             basePlane.name = 'Font Angle Base'
         else:
-            basePlane = labels.xYConstructionPlane
+            basePlane = sketchComponent.xYConstructionPlane
         offsetPlaneInput = planes.createInput()
         offsetPlaneInput.setByOffset(
             basePlane,
-            adsk.core.ValueInput.createByReal(offset))
+            adsk.core.ValueInput.createByReal(values.offset))
         sketchPlane = planes.add(offsetPlaneInput)
         sketchPlane.name = 'Font Sketch Plane'
-    else:
-        sketchPlane = plane
-    sketchTranslation = sketchPlane.transform.translation
-
-    cornerPoint = adsk.core.Point3D.create(
-        -fontSize*30+fontXOffset-sketchTranslation.x,
-        fontSize*3+fontYOffset-sketchTranslation.y,
-        0)
-    diagonalPoint = adsk.core.Point3D.create(
-        fontSize*30+fontXOffset-sketchTranslation.x,
-        -fontSize*3+fontYOffset-sketchTranslation.y,
-        0)
-    # Delete old sketches, if present, and make new ones
-    notFound = []
-    for position in positions:
-        sketchName = position.label
-        oldSketch = labels.sketches.itemByName(sketchName)
-        if oldSketch is not None:
-            if not oldSketch.deleteMe():
-                oldSketch.name = '##' + oldSketch.name
-        sketch = labels.sketches.add(sketchPlane)
-        sketch.name = position.label
-        texts = sketch.sketchTexts
-        labelInput = texts.createInput2(
-            position.label,
-            fontSize)
-        labelInput.setAsMultiLine(
-            cornerPoint,
-            diagonalPoint,
-            adsk.core.HorizontalAlignments.CenterHorizontalAlignment,
-            adsk.core.VerticalAlignments.MiddleVerticalAlignment,
-            0.0)
-        labelInput.fontName = font
-        text = texts.add(labelInput)
+        values.legendsPlane = sketchPlane
+    # Iterate positions and create or update sketches
+    for position in values.positions:
+        generator = LegendSketchGenerator(
+            sketchComponent, 
+            values, 
+            position.label)
+        generator.generate()
         adsk.doEvents()
-
-    kcgCommand.endExecution(
-        timeline, 
-        featureComponent)
+    # End feature
+    feature.addParameter(
+        'legendsFontSize', 
+        'Legends Font Size', 
+        adsk.core.ValueInput.createByReal(values.fontSize), 
+        'mm', 
+        True)
+    feature.endExecution()
     
 def setStartOp(startOp: adsk.core.Base,
                nextOp: adsk.core.Base) ->adsk.core.Base:
@@ -247,63 +385,6 @@ def command_validate_input(args: adsk.core.ValidateInputsEventArgs):
 def command_destroy(args: adsk.core.CommandEventArgs):
     global local_handlers
     local_handlers = []
-
-
-def fixKLERaw2Json(kleRaw):
-    enclosedRaw = '[' + kleRaw + ']'
-    doubleQuotedProperties = re.sub('([a-z]?[a-z0-9]):', '"\\1":', enclosedRaw)
-    return doubleQuotedProperties
-
-
-def readKLEjson(kleJson):
-    rows = json.loads(kleJson)
-    currentPosition = Position()
-    positions = []
-    for rowNum, row in enumerate(rows):
-        for item in row:
-            if isinstance(item, str):
-                labeledPosition = copy.copy(currentPosition)
-                labeledPosition.label = item
-                positions.append(labeledPosition)
-                currentPosition.incrementXresetW()
-            if isinstance(item, dict):
-                if 'x' in item:
-                    currentPosition.x += item['x']
-                if 'y' in item:
-                    currentPosition.y += item['y']
-                if 'w' in item:
-                    currentPosition.w = item['w']
-                if 'h' in item:
-                    currentPosition.h = item['h']
-                if 'rx' in item:
-                    currentPosition.rx = item['rx']
-                if 'ry' in item:
-                    currentPosition.ry = item['ry']
-                if 'r' in item:
-                    currentPosition.r = item['r']
-        currentPosition.x = 0
-        currentPosition.y += 1
-    return positions
-
-
-class Position:
-    def __init__(self) -> None:
-        self.x = 0
-        self.y = 0
-        self.w = 1
-        self.h = 1
-        self.label = ''
-        self.r = 0
-        self.rx = 0
-        self.ry = 0
-
-    def incrementXresetW(self):
-        self.x += self.w
-        self.w = 1
-        self.h = 1
-
-    def __str__(self):
-        return f'(x={self.x}, y={self.y}, w={self.w}, h={self.h}, l={self.label}, r={self.r}, rx={self.rx} , ry={self.ry})'
 
 
 ######### begin functions for Font ##################

@@ -96,7 +96,7 @@ def command_execute(args: adsk.core.CommandEventArgs):
 
     kleRawInput: adsk.core.TextBoxCommandInput = inputs.itemById('kleRaw')
     kle = KLE(kleRawInput.text)
-    positions = kle.getKLEPostions()
+    positions = kle.getKLEPositions()
 
     labelsInput: adsk.core.SelectionCommandInput = inputs.itemById('labels')
     labelsOccurrence = labelsInput.selection(0).entity

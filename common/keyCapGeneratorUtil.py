@@ -1,13 +1,12 @@
 from __future__ import annotations
-from adsk.fusion import Component, CustomFeatureDefinition, Timeline, BRepBody, MoveFeature, MoveFeatures
-from adsk.core import Matrix3D, ObjectCollection, Vector3D
+from adsk.fusion import Component, CustomFeatureDefinition, Timeline, BRepBody, MoveFeature, MoveFeatures, CustomFeatureInput
+from adsk.core import Matrix3D, ObjectCollection, Vector3D, ValueInput
 import re
 from .. import config
 from ..config import KCG_ID
 from ..lib import fusion360utils as futil
 
 class KCGCommand:
-    OCCURRENCE_TYPE = 'adsk::fusion::Occurrence'
     '''Common functions for feature registration'''
     def __init__(
             self, 
@@ -95,45 +94,77 @@ class KCGCommand:
         if editDefinition:
             editDefinition.deleteMe()
 
-    def startExecution(
+class KCGCustomFeatureParameter:
+    def __init__(
+            self, 
+            paramId: str, 
+            label: str, 
+            value: ValueInput, 
+            units: str, 
+            isVisible: bool=True) -> None:
+        self.id: str = paramId
+        self.label: str = label
+        self.value: ValueInput = value
+        self.units: str = units
+        self.isVisible: bool = isVisible
+
+class KCGCustomFeature:
+    OCCURRENCE_TYPE = 'adsk::fusion::Occurrence'
+    def __init__(
             self,
-            timeline: Timeline):
-        self.executionTimelineStartIndex = timeline.count
+            featureDefinition: CustomFeatureDefinition,
+            timeline: Timeline,
+            featureComponent: Component) -> None:
+        self.timeline: Timeline = timeline
+        self.featureComponent: Component = featureComponent
+        self.executionTimelineStartIndex: int = None
+        self.featureDefinition: CustomFeatureDefinition = featureDefinition
+        self.parameters: list[KCGCustomFeatureParameter] = []
+
+    def startExecution(self) -> None:
+        self.executionTimelineStartIndex = self.timeline.count
+
+    def addParameter(self,
+            paramId: str, 
+            label: str, 
+            value: ValueInput, 
+            units: str, 
+            isVisible: bool=True) -> None:
+        self.parameters.append(
+            KCGCustomFeatureParameter(
+                paramId, 
+                label, 
+                value, 
+                units, 
+                isVisible))
 
     def endExecution(
-            self, 
-            timeline: Timeline, 
-            component: Component):
-        endIndex = timeline.count - 1
+            self) -> None:
+        endIndex = self.timeline.count - 1
         startIndex = self.executionTimelineStartIndex
-        startEntity = timeline.item(startIndex).entity
+        startEntity = self.timeline.item(startIndex).entity
         while startEntity.objectType == self.OCCURRENCE_TYPE and startIndex < endIndex:
            startIndex += 1
-           startEntity = timeline.item(startIndex).entity
+           startEntity = self.timeline.item(startIndex).entity
 
-        endEntity = timeline.item(endIndex).entity
+        endEntity = self.timeline.item(endIndex).entity
         
         # Custom feature does not work with Occurences atm
         if startEntity.objectType != self.OCCURRENCE_TYPE and endEntity != self.OCCURRENCE_TYPE:
-            customFeature = component.features.customFeatures.createInput(self.featureDefinition)
+            customFeatures = self.featureComponent.features.customFeatures
+            customFeature = customFeatures.createInput(self.featureDefinition)
             customFeature.setStartAndEndFeatures(
                 startEntity,
                 endEntity)  
-            component.features.customFeatures.add(customFeature)
-    
-    def wiggleForExecutionTimeline(
-            self,
-            body:BRepBody, 
-            moveFeatures:MoveFeatures):
-        MoveUtil.translateBodyX(
-            body,
-            -0.01,
-            moveFeatures)   
-        MoveUtil.translateBodyX(
-            body,
-            0.01,
-            moveFeatures)
-
+            for parameter in self.parameters:
+                customFeature.addCustomParameter(
+                    parameter.id,
+                    parameter.label,
+                    parameter.value,
+                    parameter.units,
+                    parameter.isVisible
+                )
+            customFeatures.add(customFeature)
 
 class MoveUtil:
     @staticmethod

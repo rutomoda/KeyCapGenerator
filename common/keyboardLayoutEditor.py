@@ -48,7 +48,7 @@ class KLE:
             '([a-z]?[a-z0-9]):', '"\\1":', enclosedRaw)
         return doubleQuotedProperties
 
-    def getKLEPostions(self) -> list[KLEPosition]:
+    def getKLEPositions(self) -> list[KLEPosition]:
         '''Calculates the absolute KLEPositions from the KLE data'''
         rows = json.loads(self.kleJson)
         currentPosition = KLEPosition()
