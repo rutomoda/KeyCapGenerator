@@ -1,12 +1,12 @@
 from __future__ import annotations
+
+from adsk.fusion import CustomFeatureEventArgs
 from ... import config
 from ...lib import fusion360utils as futil
 import adsk.fusion
 import adsk.core
 import sys
-import re
-import copy
-import json
+import time
 import os
 import adsk.core
 from pathlib import Path
@@ -37,6 +37,7 @@ local_handlers = []
 def start():
     kcgCommand.editCreatedCallback = command_created_edit
     kcgCommand.commandCreatedCallback = command_created
+    kcgCommand.computeCallback = ComputeLegendSketches()
     kcgCommand.start(ui, ICON_FOLDER)
 
 # Executed when add-in is stopped.
@@ -58,7 +59,7 @@ class InitiateLegendSketchesValues:
         self.fontStyle = None
 
     @classmethod
-    def read(
+    def readInputs(
             cls,
             inputs: adsk.core.CommandInputs) -> InitiateLegendSketchesValues:
         values = cls()
@@ -100,7 +101,90 @@ class InitiateLegendSketchesValues:
 
         values.fontStyle = None # TODO
         return values
-  
+    
+    @classmethod
+    def readFeature(
+            cls,
+            customFeature: adsk.fusion.CustomFeature) -> InitiateLegendSketchesValues:
+        values = cls() 
+        parameters = customFeature.parameters
+        dependencies = customFeature.dependencies
+
+        '''
+        parent: adsk.fusion.CustomFeatureDependency = dependencies.itemById('legendsParent')
+        values.legendsComponent = parent.entity
+        plane: adsk.fusion.CustomFeatureDependency = dependencies.itemById('legendsPlane')
+        values.legendsPlane = plane.entity
+        '''
+        try: # for some reason there's a "invalid argument id" error instead of returning null
+            distance: adsk.fusion.CustomFeatureParameter = parameters.itemById('legendsSketchDistance')
+            if distance:
+                values.offset = distance.value
+        except:
+            pass
+        try: # for some reason there's a "invalid argument id" error instead of returning null
+            angle: adsk.fusion.CustomFeatureParameter = parameters.itemById('legendsSketchAngle')
+            if angle:
+                values.angle = angle.value
+        except:
+            pass
+
+        fontSize: adsk.fusion.CustomFeatureParameter = parameters.itemById('legendsFontSize')
+        values.fontSize = fontSize.value
+        xOffset: adsk.fusion.CustomFeatureParameter = parameters.itemById('legendsXOffset')
+        values.fontXOffset = xOffset.value
+        yOffset: adsk.fusion.CustomFeatureParameter = parameters.itemById('legendsYOffset')
+        values.fontYOffset = yOffset.value
+
+        return values
+    
+    def addValuesToFeature(
+            self,
+            feature: KCGCustomFeature):
+        '''
+        feature.addDependency(
+            'legendsParent',
+            self.legendsComponent)
+        feature.addDependency(
+            'legendsPlane',
+            self.legendsPlane) 
+        '''
+        # Because of fusion bugs we can either set angle or offset
+        if self.angle == 0.0:
+            feature.addParameter(
+                'legendsSketchDistance', 
+                'Legends Sketch Distance', 
+                adsk.core.ValueInput.createByReal(self.offset), 
+                'mm', 
+                True)
+        else:
+            feature.addParameter(
+                'legendsSketchAngle', 
+                'Legends Sketch Angle', 
+                adsk.core.ValueInput.createByReal(self.angle), 
+                'deg', 
+                True)
+
+        
+        feature.addParameter(
+            'legendsFontSize', 
+            'Legends Font Size', 
+            adsk.core.ValueInput.createByReal(self.fontSize), 
+            'mm', 
+            True)
+        feature.addParameter(
+            'legendsXOffset', 
+            'Legends X Offset', 
+            adsk.core.ValueInput.createByReal(self.fontXOffset), 
+            'mm', 
+            False)
+        feature.addParameter(
+            'legendsYOffset', 
+            'Legends Y Offset', 
+            adsk.core.ValueInput.createByReal(self.fontYOffset), 
+            'mm', 
+            False)
+
 
 def createInitiateLegendSketchesGui(
         inputs: adsk.core.CommandInputs,
@@ -208,11 +292,7 @@ def command_created_edit(args: adsk.core.CommandCreatedEventArgs):
     inputs = args.command.commandInputs
 
     customFeature: adsk.fusion.CustomFeature = ui.activeSelections.item(0).entity
-    fontSize: adsk.fusion.CustomFeatureParameter = customFeature.parameters.itemById('legendsFontSize')
-    
-    values = InitiateLegendSketchesValues()
-    values.fontSize = fontSize.value
-
+    values = InitiateLegendSketchesValues.readFeature(customFeature)
     createInitiateLegendSketchesGui(
         inputs,
         values)
@@ -293,13 +373,54 @@ class LegendSketchGenerator:
         labelInput.fontName = self.font
         texts.add(labelInput)
 
-        
+class ComputeLegendSketches(adsk.fusion.CustomFeatureEventHandler):
+    def __init__(self):
+        super().__init__()
+
+    def notify(
+            self, 
+            eventArgs: CustomFeatureEventArgs) -> None:
+        customFeature = eventArgs.customFeature
+
+        try: 
+            values = InitiateLegendSketchesValues.readFeature(customFeature)
+            offsetPlane: adsk.fusion.ConstructionPlane = None
+            anglePlane: adsk.fusion.ConstructionPlane = None
+            for feature in customFeature.features:
+                if feature.objectType == adsk.fusion.ConstructionPlane.classType():
+                    if offsetPlane:
+                        anglePlane = offsetPlane
+                        offsetPlane = feature
+                    else:
+                        offsetPlane = feature
+                if feature.objectType == adsk.fusion.Sketch.classType():
+                    label = feature.name
+                    text: adsk.fusion.SketchText
+                    for text in feature.sketchTexts:
+                        if text.text == label:
+                            text.height = values.fontSize
+                            # TODO definition: adsk.fusion.MultiLineTextDefinition = text.definition
+            # There's a bug which crashes fusion if we adjust both planes
+            if anglePlane and values.angle:
+                definition: adsk.fusion.ConstructionPlaneAtAngleDefinition = anglePlane.definition
+                definition.redefine(
+                    adsk.core.ValueInput.createByReal(values.angle),
+                    definition.linearEntity,
+                    None)
+            if offsetPlane and values.offset:
+                definition: adsk.fusion.ConstructionPlaneOffsetDefinition = offsetPlane.definition
+                definition.redefine(
+                    adsk.core.ValueInput.createByReal(values.offset),
+                    definition.planarEntity)
+        except Exception as e:
+            eventArgs.computeStatus.statusMessages.addError(kcgCommand.kcgId.id+'_COMPUTE_FAILED', f'caught {type(e)}: {e.args[0]}')
+        adsk.doEvents()
 
 # This event handler is called when the user clicks the OK button in the command dialog or
 # is immediately called after the created event not command inputs were created for the dialog.
 def command_execute(args: adsk.core.CommandEventArgs):
     inputs = args.command.commandInputs
-    values = InitiateLegendSketchesValues.read(inputs)
+    values = InitiateLegendSketchesValues.readInputs(inputs)
     # Create new assembly component
 
     design = adsk.fusion.Design.cast(app.activeProduct)
@@ -349,20 +470,9 @@ def command_execute(args: adsk.core.CommandEventArgs):
         generator.generate()
         adsk.doEvents()
     # End feature
-    feature.addParameter(
-        'legendsFontSize', 
-        'Legends Font Size', 
-        adsk.core.ValueInput.createByReal(values.fontSize), 
-        'mm', 
-        True)
+    values.addValuesToFeature(feature)
     feature.endExecution()
     
-def setStartOp(startOp: adsk.core.Base,
-               nextOp: adsk.core.Base) ->adsk.core.Base:
-    if startOp is None:
-        return nextOp
-    else:
-        return startOp 
 
 # This event handler is called when the command needs to compute a new preview in the graphics window.
 def command_preview(args: adsk.core.CommandEventArgs):

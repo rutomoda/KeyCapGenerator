@@ -1,5 +1,5 @@
 from __future__ import annotations
-from adsk.fusion import Component, CustomFeatureDefinition, Timeline, BRepBody, MoveFeature, MoveFeatures, CustomFeatureInput
+from adsk.fusion import Component, CustomFeatureDefinition, Timeline, BRepBody, MoveFeature, MoveFeatures, Occurrence
 from adsk.core import Matrix3D, ObjectCollection, Vector3D, ValueInput
 import re
 from .. import config
@@ -24,6 +24,7 @@ class KCGCommand:
         self.featureDefinition: CustomFeatureDefinition = None
         self.commandCreatedCallback = None
         self.editCreatedCallback = None
+        self.computeCallback = None
 
     def start(
             self,
@@ -31,10 +32,10 @@ class KCGCommand:
             iconFolder='') -> None:
         # Create a command Definition.
         commandDefinition = ui.commandDefinitions.addButtonDefinition(
-          self.kcgId.id, 
-          self.name, 
-          self.description, 
-          iconFolder)
+            self.kcgId.id, 
+            self.name, 
+            self.description, 
+            iconFolder)
 
         # Define an event handler for the command created event. It will be called when the button is clicked.
         futil.add_handler(
@@ -71,6 +72,8 @@ class KCGCommand:
             self.name,
             iconFolder)
         self.featureDefinition.editCommandId = editDefinition.id
+        if self.computeCallback:
+            self.featureDefinition.customFeatureCompute.add(self.computeCallback)
     
     def stop(
             self, 
@@ -108,8 +111,16 @@ class KCGCustomFeatureParameter:
         self.units: str = units
         self.isVisible: bool = isVisible
 
+class KCGCustomDependencyParameter:
+    def __init__(
+            self,
+            paramId: str,
+            entity) -> None:
+        self.id: str = paramId
+        self.entity = entity
+
 class KCGCustomFeature:
-    OCCURRENCE_TYPE = 'adsk::fusion::Occurrence'
+    OCCURRENCE_TYPE = Occurrence.classType()
     def __init__(
             self,
             featureDefinition: CustomFeatureDefinition,
@@ -120,6 +131,7 @@ class KCGCustomFeature:
         self.executionTimelineStartIndex: int = None
         self.featureDefinition: CustomFeatureDefinition = featureDefinition
         self.parameters: list[KCGCustomFeatureParameter] = []
+        self.dependencies: list[KCGCustomDependencyParameter] = []
 
     def startExecution(self) -> None:
         self.executionTimelineStartIndex = self.timeline.count
@@ -138,6 +150,14 @@ class KCGCustomFeature:
                 units, 
                 isVisible))
 
+    def addDependency(self,
+            paramId: str,
+            entity) -> None:
+        self.dependencies.append(
+            KCGCustomDependencyParameter(
+                paramId,
+                entity))
+
     def endExecution(
             self) -> None:
         endIndex = self.timeline.count - 1
@@ -152,19 +172,22 @@ class KCGCustomFeature:
         # Custom feature does not work with Occurences atm
         if startEntity.objectType != self.OCCURRENCE_TYPE and endEntity != self.OCCURRENCE_TYPE:
             customFeatures = self.featureComponent.features.customFeatures
-            customFeature = customFeatures.createInput(self.featureDefinition)
-            customFeature.setStartAndEndFeatures(
+            featureInput = customFeatures.createInput(self.featureDefinition)
+            featureInput.setStartAndEndFeatures(
                 startEntity,
                 endEntity)  
             for parameter in self.parameters:
-                customFeature.addCustomParameter(
+                featureInput.addCustomParameter(
                     parameter.id,
                     parameter.label,
                     parameter.value,
                     parameter.units,
-                    parameter.isVisible
-                )
-            customFeatures.add(customFeature)
+                    parameter.isVisible)
+            for dependency in self.dependencies:
+                featureInput.addDependency(
+                    dependency.id, 
+                    dependency.entity)
+            customFeatures.add(featureInput)
 
 class MoveUtil:
     @staticmethod
