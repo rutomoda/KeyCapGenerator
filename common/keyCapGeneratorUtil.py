@@ -208,17 +208,23 @@ class MoveUtil:
 class KCGComponent:
     '''Provides some common functions for component handling especially in regards to naming conventions'''
 
-    def __init__(self, component: Component) -> None:
+    def __init__(self, 
+            component: Component) -> None:
         self.component = component
 
-    def findSize(self, size: int, row: str = '') -> Component:
+    def findSize(self, 
+            size: int, 
+            row: str = '') -> Component:
         if row:
             sizeName = SizeNameFormat.formatRowSizeName(row, size)
         else:
             sizeName = SizeNameFormat.formatSizeName(size)
         return self.findComponentWithLabel(sizeName)
 
-    def findLabeledSize(self, size: int, label: str, row: str = '') -> Component:
+    def findLabeledSize(self, 
+            size: int, 
+            label: str, 
+            row: str = '') -> Component:
         if row:
             sizeName = SizeNameFormat.formatLabeledRowSizeName(
                 row,
@@ -228,8 +234,9 @@ class KCGComponent:
             sizeName = SizeNameFormat.formatLabeledSizeName(size, label)
         return self.findComponentWithLabel(sizeName)
 
-    def findComponentWithLabel(self, sizeName: str):
-        sizeName = sizeName.replace('+', '\\+')
+    def findComponentWithLabel(self, 
+            sizeName: str):
+        sizeName = re.escape(sizeName)
         if sizeName.startswith('R'):
             # Either it is the beginning of the string or there is something else than a number in front
             namePattern = re.compile(f'(_|\A){sizeName}(\Z|:)')
@@ -244,13 +251,17 @@ class KCGComponent:
 
         return None
 
-    def setSizeName(self, size: int) -> None:
+    def setSizeName(self, 
+            size: int) -> None:
         self.component.name = SizeNameFormat.formatSizeName(size)
 
-    def setLabeledSizeName(self, size: int, label: str) -> None:
+    def setLabeledSizeName(self, 
+            size: int, 
+            label: str) -> None:
         self.component.name = SizeNameFormat.formatLabeledSizeName(size, label)
 
-    def createChild(self, name: str = None) -> Component:
+    def createChild(self, 
+            name: str = None) -> Component:
         transform = Matrix3D.create()
         occurrence = self.component.occurrences.addNewComponent(transform)
         child = occurrence.component
