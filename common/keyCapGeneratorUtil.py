@@ -239,10 +239,12 @@ class KCGComponent:
         sizeName = re.escape(sizeName)
         if sizeName.startswith('R'):
             # Either it is the beginning of the string or there is something else than a number in front
-            namePattern = re.compile(f'(_|\A){sizeName}(\Z|:)')
+            # Fusion adds a number to the end of the name if there are multiple components with the same name
+            namePattern = re.compile(f'(_|\A){sizeName}(\Z|:|\ \(\d+\))')
         else:
             # Either it is the beginning of the string or there is something else than a number in front
-            namePattern = re.compile(f'(?:[^\d]|\A){sizeName}(\Z|:)')
+            # Fusion adds a number to the end of the name if there are multiple components with the same name
+            namePattern = re.compile(f'(?:[^\d]|\A){sizeName}(\Z|:|\ \(\d+\))')
         sizeOccurrenceList = self.component.occurrences.asList
         for oo in range(sizeOccurrenceList.count):
             occurrence = sizeOccurrenceList.item(oo)
