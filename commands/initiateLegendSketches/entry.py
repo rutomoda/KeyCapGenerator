@@ -318,6 +318,7 @@ class LegendSketchGenerator:
             self, 
             parent: adsk.fusion.Component,
             values: InitiateLegendSketchesValues,
+            text: str,
             label: str) -> None:
         self.parent = parent
         self.sketchPlane = values.legendsPlane
@@ -331,13 +332,14 @@ class LegendSketchGenerator:
             values.fontSize*30 + values.fontXOffset - sketchTranslation.x,
             -values.fontSize*3 + values.fontYOffset - sketchTranslation.y,
             0)
-        self.label = label
+        self.name = label
+        self.text = text
         self.font = values.font
         self.fontSize = values.fontSize
         self.fontStyle = values.fontStyle
 
     def generate(self):
-        oldSketch = self.parent.sketches.itemByName(self.label)
+        oldSketch = self.parent.sketches.itemByName(self.name)
         if oldSketch:
             self.updateSketch(oldSketch)
         else:
@@ -348,7 +350,7 @@ class LegendSketchGenerator:
             sketch: adsk.fusion.Sketch):
         texts = sketch.sketchTexts
         for text in texts:
-            if text.text == self.label:
+            if text.text == self.text:
                 text.fontName = self.font
                 text.height = self.fontSize
                 if self.fontStyle:
@@ -359,10 +361,10 @@ class LegendSketchGenerator:
             self):
         sketches = self.parent.sketches
         sketch = sketches.add(self.sketchPlane)
-        sketch.name = self.label
+        sketch.name = self.name
         texts = sketch.sketchTexts
         labelInput = texts.createInput2(
-            self.label,
+            self.text,
             self.fontSize)
         labelInput.setAsMultiLine(
             self.cornerPoint,
@@ -466,6 +468,7 @@ def command_execute(args: adsk.core.CommandEventArgs):
         generator = LegendSketchGenerator(
             sketchComponent, 
             values, 
+            position.text,
             position.label)
         generator.generate()
         adsk.doEvents()

@@ -99,8 +99,8 @@ def command_execute(args: adsk.core.CommandEventArgs):
     positions = kle.getKLEPositions()
 
     labelsInput: adsk.core.SelectionCommandInput = inputs.itemById('labels')
-    labelsOccurrence = labelsInput.selection(0).entity
-    labels = labelsOccurrence.component
+    labelsOccurrence: adsk.fusion.Occurrence = labelsInput.selection(0).entity
+    labels:adsk.fusion.Component = labelsOccurrence.component
 
     sizesInput: adsk.core.SelectionCommandInput = inputs.itemById('sizes')
     sizesOccurrence = sizesInput.selection(0).entity
@@ -159,6 +159,14 @@ def command_execute(args: adsk.core.CommandEventArgs):
         labeledSizesOccurrence.deleteMe()
 
     # TODO UI Output non found sizes, inform if nothing was created
+    if len(labelNotFound) > 0:
+      futil.log('LabelSketches not found:\n===')
+      futil.log(''.join(labelNotFound))
+    if len(sizeNotFound) > 0:
+      futil.log('Sizes not found:\n===')
+      futil.log(''.join(str(size) for size in sizeNotFound))
+     
+
 
 
 # This event handler is called when the command needs to compute a new preview in the graphics window.
@@ -194,9 +202,10 @@ def createLabeledSize(
         row: str,
         sizes: KCGComponent,
         labeledSizes: adsk.fusion.Component) -> adsk.fusion.Component:
-    sizeComponent = sizes.findSize(size, row)
+    sizeComponent = sizes.findSize(size, row) or sizes.findSize(size)
     if sizeComponent is None:
         return None
+    
     sizeKeycap = sizeComponent.bRepBodies.item(0)
 
     trans = adsk.core.Matrix3D.create()
@@ -238,7 +247,7 @@ def embossLabel(
     labelComponent = labeledSizeComponent.occurrences.item(
         0).component
     labelSketch = labelComponent.sketches.item(0)
-
+    futil.log(labelSketch.name)
     for tryNum in range(10):
         try:
             # Gather sketch profiles

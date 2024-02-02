@@ -12,7 +12,8 @@ class KLEPosition:
         self.y = 0
         self.width = 1
         self.height = 1
-        self.label = ''
+        self.label = '<empty>'
+        self.text = ''
         self.rotation = 0
         self.rotationX = 0
         self.rotationY = 0
@@ -30,6 +31,14 @@ class KLEPosition:
 
     def sizeToInt(self) -> int:
         return int(self.width * 100)
+    
+    def setTextAndLabel(self, text:str):
+        self.text = text
+        # We use label as sketch name, so we cannot use empty string, newline or backslash
+        if text is not None and text != '':
+          self.label = text.replace('\n','<nl>').replace('\\','<bs>')
+        else:
+          self.label = '<empty>'
 
 
 class KLE:
@@ -58,7 +67,7 @@ class KLE:
             for item in row:
                 if isinstance(item, str):
                     labeledPosition = copy.copy(currentPosition)
-                    labeledPosition.label = item
+                    labeledPosition.setTextAndLabel(item)
                     positions.append(labeledPosition)
                     currentPosition.incrementXresetWidthAndHeight()
                 if isinstance(item, dict):
