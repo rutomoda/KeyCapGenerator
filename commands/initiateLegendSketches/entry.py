@@ -57,6 +57,7 @@ class InitiateLegendSketchesValues:
         self.fontXOffset: float = None
         self.fontYOffset: float = None
         self.fontStyle = None
+        self.positionOffset: int = 0.075 # TODO: make this a gui input
 
     @classmethod
     def readInputs(
@@ -313,9 +314,22 @@ def command_created_edit(args: adsk.core.CommandCreatedEventArgs):
                       command_destroy,
                       local_handlers=local_handlers)
 
+class GeneratorSketchText:
+    def __init__(self, 
+            corner: adsk.core.Point3D, 
+            diagonal: adsk.core.Point3D,
+            text: str) -> None:
+        self.corner = corner
+        self.diagonal = diagonal
+        self.text = text
+
+    
 class LegendSketchGenerator:
-    def __init__(
-            self, 
+    POSITION_OFFSETS = {
+        1:[[-3,3,3,-3]],
+        2:[[-1,1,1,0],[-1,0,1,-1]]
+    } # TODO: add more offsets and improve readability (these are fontSize multipliers)
+    def __init__(self, 
             parent: adsk.fusion.Component,
             values: InitiateLegendSketchesValues,
             text: str,
@@ -324,14 +338,31 @@ class LegendSketchGenerator:
         self.sketchPlane = values.legendsPlane
         # Sketches do not need to be centered on origin
         sketchTranslation = self.sketchPlane.transform.translation
-        self.cornerPoint = adsk.core.Point3D.create(
-            -values.fontSize*30 + values.fontXOffset - sketchTranslation.x,
-            values.fontSize*3 + values.fontYOffset - sketchTranslation.y,
-            0)
-        self.diagonalPoint = adsk.core.Point3D.create(
-            values.fontSize*30 + values.fontXOffset - sketchTranslation.x,
-            -values.fontSize*3 + values.fontYOffset - sketchTranslation.y,
-            0)
+        textToken = text.split('\n')
+        if len(textToken) <= 2:
+            offsets = self.POSITION_OFFSETS[len(textToken)]
+        else:
+            offsets = self.POSITION_OFFSETS[1]
+            textToken = [text]
+        self.generatorSketchTexts = []
+        for index, offset in enumerate(offsets):
+            cornerOffsetX =   (values.fontSize+2*values.positionOffset/10)*10*offset[0] + values.positionOffset
+            cornerOffsetY =   (values.fontSize+2*values.positionOffset)*offset[1] - values.positionOffset
+            diagonalOffsetX = (values.fontSize+2*values.positionOffset/10)*10*offset[2] - values.positionOffset
+            diagnoalOffsetY = (values.fontSize+2*values.positionOffset)*offset[3] + values.positionOffset
+            cornerPoint = adsk.core.Point3D.create(
+                cornerOffsetX + values.fontXOffset - sketchTranslation.x,
+                cornerOffsetY + values.fontYOffset - sketchTranslation.y,
+                0)
+            diagonalPoint = adsk.core.Point3D.create(
+                diagonalOffsetX + values.fontXOffset - sketchTranslation.x,
+                diagnoalOffsetY + values.fontYOffset - sketchTranslation.y,
+                0)
+            self.generatorSketchTexts.append(
+                GeneratorSketchText(
+                    cornerPoint,
+                    diagonalPoint,
+                    textToken[index]))
         self.name = label
         self.text = text
         self.font = values.font
@@ -363,17 +394,19 @@ class LegendSketchGenerator:
         sketch = sketches.add(self.sketchPlane)
         sketch.name = self.name
         texts = sketch.sketchTexts
-        labelInput = texts.createInput2(
-            self.text,
-            self.fontSize)
-        labelInput.setAsMultiLine(
-            self.cornerPoint,
-            self.diagonalPoint,
-            adsk.core.HorizontalAlignments.CenterHorizontalAlignment,
-            adsk.core.VerticalAlignments.MiddleVerticalAlignment,
-            0.0)
-        labelInput.fontName = self.font
-        texts.add(labelInput)
+        for text in self.generatorSketchTexts:
+            labelInput = texts.createInput2(
+                text.text,
+                self.fontSize)
+            labelInput.setAsMultiLine(
+                text.corner,
+                text.diagonal,
+                adsk.core.HorizontalAlignments.CenterHorizontalAlignment,
+                adsk.core.VerticalAlignments.MiddleVerticalAlignment,
+                0.0)
+            labelInput.fontName = self.font
+            texts.add(labelInput)
+        sketch.isLightBulbOn = False  
 
 class ComputeLegendSketches(adsk.fusion.CustomFeatureEventHandler):
     def __init__(self):
@@ -462,6 +495,7 @@ def command_execute(args: adsk.core.CommandEventArgs):
             adsk.core.ValueInput.createByReal(values.offset))
         sketchPlane = planes.add(offsetPlaneInput)
         sketchPlane.name = 'Font Sketch Plane'
+        sketchPlane.isLightBulbOn = False
         values.legendsPlane = sketchPlane
     # Iterate positions and create or update sketches
     for position in values.positions:
