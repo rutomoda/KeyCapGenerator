@@ -29,16 +29,18 @@ WORKSPACE_ID = 'FusionSolidEnvironment'
 PANEL_ID = 'SolidCreatePanel'
 
 # See also: https://cdn.sparkfun.com/datasheets/Components/Switches/MX%20Series.pdf and https://deskthority.net/wiki/Space_bar_dimensions
+# 4U spacing from marbastlib (https://github.com/ebastler/marbastlib)
 STEM_OFFSETS = {
     200: 1.1938,  # = 0.94in/2
     225: 1.1938,
     275: 1.1938,
-    300: 1.95,
+    300: 1.905,
+    400: 2.8575, 
     625: 5.0,
     700: 5.715
 }
 
-KEYCAP_SIZES = [100, 125, 150, 175, 200, 225, 275, 300, 625, 700]
+KEYCAP_SIZES = [100, 125, 150, 175, 200, 225, 275, 300, 400, 625, 700]
 MAX_ROW = 7
 
 KEYCAP_SIZE_FORMAT = '{}_{:02n}U'
