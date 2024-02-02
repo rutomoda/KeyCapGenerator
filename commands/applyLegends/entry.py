@@ -248,7 +248,11 @@ def embossLabel(
         0).component
     labelSketch = labelComponent.sketches.item(0)
     futil.log(labelSketch.name)
-    for tryNum in range(10):
+    timeline = labelComponent.parentDesign.timeline
+    timelineMarker = timeline.count
+    isCompleted = False
+    tryNum = 0
+    while not isCompleted and tryNum < 10:
         try:
             # Gather sketch profiles
             profiles = adsk.core.ObjectCollection.create()
@@ -280,10 +284,16 @@ def embossLabel(
                 moveDirectionInput)
             moveDirection.isLightBulbOn = False
             moveDirection.name = 'Emboss Move Direction'
+            isCompleted = True    
         except:
+            # For some reason, extrudeFeatures.addSimple sometimes fails    
             futil.log(f'extrude try {tryNum}')
+            # Reset timeline marker
+            while timeline.count > timelineMarker:  # While there are new features
+                timeline.item(timeline.count - 1).entity.deleteMe()  # Delete the last feature
             adsk.doEvents()
             time.sleep(0.1+0.009*tryNum*tryNum)
+            tryNum += 1 
 
     # Subtract size body from label bodies
     subtractLabels = allBodiesFrom(labelComponent)
